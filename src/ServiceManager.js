@@ -11,14 +11,17 @@ export default function ServiceManager({ profile }) {
   const [newServiceName, setNewServiceName] = useState('')
   const [newServiceTime, setNewServiceTime] = useState(15)
   const [newServiceBilling, setNewServiceBilling] = useState(0)
+  // --- NUEVO: Estado para el % objetivo de nuevos clientes ---
+  const [newTargetPct, setNewTargetPct] = useState(0)
   
-  // Para el admin, guardará el ID del desplegable.
-  // Para el gerente, se rellenará automáticamente con su ID.
-  const [newServicePharmacyId, setNewServicePharmacyId] = useState('')
+  // --- MODIFICADO: Para el admin, guardará un ARRAY de IDs para selección múltiple ---
+  // Para el gerente, se rellenará automáticamente con su ID en un array de un solo elemento.
+  const [newServicePharmacyIds, setNewServicePharmacyIds] = useState([])
 
   // Carga los datos basándose en el rol
   useEffect(() => {
     loadInitialData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]) // Se ejecuta cuando el 'profile' está listo
 
   async function loadInitialData() {
@@ -36,8 +39,10 @@ export default function ServiceManager({ profile }) {
       // Y solo puede ver los servicios de su farmacia
       serviceQuery = serviceQuery.eq('pharmacy_id', myPharmacyId)
 
-      // Auto-rellena el ID de farmacia para el formulario
-      setNewServicePharmacyId(myPharmacyId)
+      // Auto-rellena el ID de farmacia para el formulario (como array)
+      if (myPharmacyId) {
+        setNewServicePharmacyIds([myPharmacyId.toString()])
+      }
     }
     // (Un admin se salta este IF y carga todo)
 
@@ -48,9 +53,9 @@ export default function ServiceManager({ profile }) {
 
     if (pharmacyData.data) {
       setPharmacies(pharmacyData.data)
-      // Si eres admin y no has seleccionado nada, selecciona la primera
-      if (profile.role === 'admin' && pharmacyData.data.length > 0) {
-        setNewServicePharmacyId(pharmacyData.data[0].id)
+      // Si eres admin, inicializamos vacío para forzar selección
+      if (profile.role === 'admin') {
+        setNewServicePharmacyIds([])
       }
     }
     if (serviceData.data) {
@@ -59,33 +64,53 @@ export default function ServiceManager({ profile }) {
     setLoading(false)
   }
 
-  // --- Manejador para CREAR un servicio ---
+  // --- NUEVO: Manejador para cambios en el select múltiple ---
+  const handlePharmacySelectionChange = (e) => {
+    const options = e.target.options;
+    const value = [];
+    for (let i = 0, l = options.length; i < l; i++) {
+      if (options[i].selected) {
+        value.push(options[i].value);
+      }
+    }
+    setNewServicePharmacyIds(value);
+  }
+
+  // --- Manejador para CREAR un servicio (Soporta Múltiples Farmacias) ---
   const handleCreateService = async (e) => {
     e.preventDefault()
 
-    if (!newServiceName || !newServicePharmacyId || !newServiceTime) {
-      alert('Nombre, Tiempo y Farmacia son obligatorios.')
+    // Validación actualizada para array de farmacias
+    if (!newServiceName || newServicePharmacyIds.length === 0 || !newServiceTime) {
+      alert('Nombre, Tiempo y al menos una Farmacia son obligatorios.')
       return
     }
 
+    // Preparamos los datos para insertar (mapeamos cada farmacia seleccionada a un nuevo servicio)
+    const servicesToInsert = newServicePharmacyIds.map(pharmacyId => ({
+        name: newServiceName,
+        time_per_service: parseInt(newServiceTime, 10),
+        estimated_billing: parseFloat(newServiceBilling) || 0,
+        target_new_clients_pct: parseFloat(newTargetPct) || 0, // ¡NUEVO CAMPO!
+        pharmacy_id: parseInt(pharmacyId, 10)
+    }));
+
     const { data, error } = await supabase
       .from('services')
-      .insert({
-        name: newServiceName,
-        time_per_service: newServiceTime,
-        estimated_billing: newServiceBilling,
-        pharmacy_id: newServicePharmacyId, // Ya está filtrado por rol
-      })
+      .insert(servicesToInsert)
       .select()
 
     if (error) {
       // La RLS de Supabase nos protege, pero por si acaso
       alert('Error al crear el servicio: ' + error.message)
     } else {
-      alert('¡Servicio creado!')
+      alert(`¡Servicio creado exitosamente en ${data.length} farmacia(s)!`)
       setNewServiceName('')
       setNewServiceTime(15)
       setNewServiceBilling(0)
+      setNewTargetPct(0)
+      // Si es admin limpiamos selección, si es gerente mantenemos la suya
+      if (profile.role === 'admin') setNewServicePharmacyIds([]); 
       loadInitialData() // Recarga todo
     }
   }
@@ -145,24 +170,37 @@ export default function ServiceManager({ profile }) {
             />
           </div>
           
-          {/* --- CAMPO CONDICIONAL --- */}
-          {/* Solo el 'admin' ve el desplegable de Farmacias */}
-          {profile.role === 'admin' && (
-            <div>
-              <label htmlFor="s-pharmacy">Farmacia</label>
+          {/* --- NUEVO CAMPO --- */}
+          <div>
+            <label htmlFor="s-target">Obj. % Nuevos</label>
+            <input
+              id="s-target" type="number" min="0" max="100" step="0.1"
+              value={newTargetPct}
+              onChange={(e) => setNewTargetPct(e.target.value)}
+            />
+          </div>
+          
+          {/* --- CAMPO CONDICIONAL FARMACIA (MODIFICADO PARA MÚLTIPLE) --- */}
+          {/* Solo mostramos si hay farmacias cargadas */}
+          {pharmacies.length > 0 && (
+            <div className={profile.role === 'admin' ? "full-width-select" : ""}>
+              <label htmlFor="s-pharmacy">Farmacia(s)</label>
               <select
                 id="s-pharmacy"
-                value={newServicePharmacyId}
-                onChange={(e) => setNewServicePharmacyId(e.target.value)}
+                multiple={profile.role === 'admin'} // Múltiple solo si es admin
+                value={newServicePharmacyIds}
+                onChange={handlePharmacySelectionChange} // Usamos el nuevo manejador
+                size={profile.role === 'admin' ? 5 : 1} // Altura del select
+                style={{ height: profile.role === 'admin' ? 'auto' : 'initial' }}
               >
-                <option disabled value="">-- Asignar a farmacia --</option>
+                {profile.role !== 'admin' && <option value="" disabled>-- Asignar a farmacia --</option>}
                 {pharmacies.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
+              {profile.role === 'admin' && <small style={{display:'block', color:'#666'}}>Mantén Ctrl (o Cmd) para seleccionar varias.</small>}
             </div>
           )}
-          {/* Un 'gerente' no ve el desplegable, su ID ya está asignado */}
           
           <button type="submit" className="button">Crear</button>
         </div>
@@ -177,20 +215,22 @@ export default function ServiceManager({ profile }) {
             <th>Nombre</th>
             <th>Tiempo</th>
             <th>Fact. Estimada</th>
-            {/* Solo el admin necesita ver la columna de farmacia */}
+            <th>% Nuevos</th> {/* NUEVA COLUMNA */}
+            {/* Solo el admin ve la columna de farmacia */}
             {profile.role === 'admin' && <th>Farmacia</th>}
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {services.length === 0 ? (
-            <tr><td colSpan={profile.role === 'admin' ? 5 : 4}>No hay servicios creados.</td></tr>
+            <tr><td colSpan={profile.role === 'admin' ? 6 : 5}>No hay servicios creados.</td></tr>
           ) : (
             services.map((service) => (
               <tr key={service.id}>
                 <td>{service.name}</td>
                 <td>{service.time_per_service} min</td>
                 <td>{service.estimated_billing} €</td>
+                <td>{service.target_new_clients_pct || 0}%</td> {/* NUEVO DATO */}
                 {profile.role === 'admin' && (
                   <td>{service.pharmacies?.name || 'N/A'}</td>
                 )}

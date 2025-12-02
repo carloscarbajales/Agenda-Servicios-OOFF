@@ -1,30 +1,79 @@
+import { useState } from 'react'
 import ServiceManager from './ServiceManager'
-import EmployeeManager from './EmployeeManager' // <-- 1. IMPORTAR
+import EmployeeManager from './EmployeeManager'
+import ObjectiveManager from './ObjectiveManager'
+import ScheduleManager from './ScheduleManager'
+import EmployeeAssignmentManager from './EmployeeAssignmentManager'
+import PharmacyManager from './PharmacyManager'
+
+// --- Componente Auxiliar para Colapsar ---
+function CollapsibleCard({ title, children, defaultOpen = false }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="settings-card full-width">
+      <div 
+        className="card-header" 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
+        <h2 style={{ margin: 0, borderBottom: 'none' }}>{title}</h2>
+        <span style={{ fontSize: '1.5rem', color: '#666' }}>
+          {isOpen ? '−' : '+'}
+        </span>
+      </div>
+      
+      {isOpen && (
+        <div className="card-content" style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Settings({ profile }) {
-  
+
   return (
     <div className="settings-container">
-      <h1>Panel de Configuración</h1>
-      <p>Bienvenido, {profile.full_name}.</p>
+      <h1 style={{ marginBottom: '30px' }}>Panel de Configuración</h1>
       
-      <div className="settings-grid">
-      
-        <div className="settings-card full-width">
-          <h2>Gestión de Servicios</h2>
+      <div className="settings-grid-container">
+
+        {/* --- GESTIÓN FARMACIAS --- */}
+        {(profile.role === 'admin' || profile.role === 'gestor') && (
+            <CollapsibleCard title="Gestión de Farmacias">
+              <PharmacyManager profile={profile} />
+            </CollapsibleCard>
+        )}
+
+        {/* --- GESTIÓN SERVICIOS --- */}
+        <CollapsibleCard title="Gestión de Servicios">
           <ServiceManager profile={profile} />
-        </div>
+        </CollapsibleCard>
 
-        {/* --- 2. AÑADIR LA NUEVA TARJETA --- */}
-        <div className="settings-card full-width">
-          <h2>Gestión de Empleados</h2>
+        {/* --- GESTIÓN HORARIOS --- */}
+        <CollapsibleCard title="Gestión de Horarios" defaultOpen={true}>
+          <ScheduleManager profile={profile} />
+        </CollapsibleCard>
+
+        {/* --- GESTIÓN EMPLEADOS --- */}
+        <CollapsibleCard title="Gestión de Empleados">
           <EmployeeManager profile={profile} />
-        </div>
+        </CollapsibleCard>
 
-        <div className="settings-card">
-          <h2>Gestión de Objetivos</h2>
-          <p>Aquí podrás definir los objetivos de citas y facturación.</p>
-        </div>
+        {/* --- GESTIÓN OBJETIVOS --- */}
+        <CollapsibleCard title="Gestión de Objetivos">
+          <ObjectiveManager profile={profile} />
+          {/* Asignación de objetivos a empleados */}
+          {(profile.role === 'admin' || profile.role === 'gestor' || profile.role === 'gerente') && (
+              <>
+                <div style={{ margin: '30px 0', borderTop: '2px dashed #eee' }}></div>
+                <EmployeeAssignmentManager profile={profile} />
+              </>
+          )}
+        </CollapsibleCard>
+
       </div>
     </div>
   )
