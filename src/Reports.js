@@ -54,11 +54,11 @@ export default function Reports({ profile }) {
   const [filterPharmacyId, setFilterPharmacyId] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDate, setFilterDate] = useState('')
-
-  // --- ¡CORRECCIÓN! Estado para mostrar inactivos ---
+  
+  // --- CORRECCIÓN: Estado faltante añadido ---
   const [showInactiveEmployees, setShowInactiveEmployees] = useState(false)
 
-  // Fechas
+  // Fechas (Por defecto: mes actual)
   const [startDate, setStartDate] = useState(() => {
       const date = new Date(); return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
   });
@@ -80,7 +80,7 @@ export default function Reports({ profile }) {
       processAndFilterData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, allAppointments, objectives, services, employees, assignments, filterServiceId, filterEmployeeId, filterStatus, filterPharmacyId, searchTerm, filterDate, startDate, endDate])
+  }, [loading, allAppointments, objectives, services, employees, assignments, filterServiceId, filterEmployeeId, filterStatus, filterPharmacyId, searchTerm, startDate, endDate])
 
   async function loadAllData() {
     setLoading(true)
@@ -89,11 +89,12 @@ export default function Reports({ profile }) {
     // Queries
     let appointmentsQuery = supabase.from('appointments').select('*, services!inner(id, name), pharmacies!inner(id, name), profiles!left(id, full_name)')
     let objectivesQuery = supabase.from('objectives').select('*, services!inner(id, name)')
-    let servicesQuery = supabase.from('services').select('*')
+    let servicesQuery = supabase.from('services').select('*, pharmacies(name)') // Traer nombre farmacia
     let employeesQuery = supabase.from('profiles').select('id, full_name, role, pharmacy_id, active')
     let assignmentsQuery = supabase.from('employee_assignments').select('*')
     let pharmaciesQuery = supabase.from('pharmacies').select('*')
 
+    // Filtros Rol
     if (profile.role !== 'admin') {
       if (pharmacyId) {
           appointmentsQuery = appointmentsQuery.eq('pharmacy_id', pharmacyId);
@@ -127,113 +128,167 @@ export default function Reports({ profile }) {
       setEmployees(results[4].data || []);
       setAssignments(results[5].data || []);
 
+      // Configurar filtro por defecto
+      if (profile.role !== 'admin' && profile.role !== 'gestor' && profile.pharmacy_id) {
+          setFilterPharmacyId(profile.pharmacy_id.toString());
+      }
+
     } catch (error) { console.error(error); alert("Error al cargar datos: " + error.message); } 
     finally { setLoading(false); }
   }
 
+  // --- Helper para Nombres Únicos de Servicio ---
+  const getUniqueServiceNames = () => {
+      let available = services;
+      if (filterPharmacyId !== 'all') {
+          available = services.filter(s => s.pharmacy_id.toString() === filterPharmacyId);
+      }
+      const names = available.map(s => s.name);
+      return [...new Set(names)].sort();
+  }
+
+  // --- PROCESAMIENTO CENTRAL ---
   function processAndFilterData() {
     if (!Array.isArray(allAppointments)) return;
 
     const startISO = `${startDate}T00:00:00`;
     const endISO = `${endDate}T23:59:59`;
 
-    const monthlyAppointments = allAppointments.filter(app => 
-        app.appointment_time >= startISO && app.appointment_time <= endISO
-    );
+    // 1. Filtrar UNIVERSO de citas (Por Fecha y Farmacia)
+    const universeAppointments = allAppointments.filter(app => {
+        const dateMatch = app.appointment_time >= startISO && app.appointment_time <= endISO;
+        const pharmacyMatch = filterPharmacyId === 'all' || app.pharmacy_id?.toString() === filterPharmacyId?.toString();
+        return dateMatch && pharmacyMatch;
+    });
 
-    calculateMonthlyProgress(monthlyAppointments);
-    calculateIndividualProgressLogic(monthlyAppointments); 
-    filterAppointmentListLogic();
+    calculateServiceReport(universeAppointments);
+    calculateEmployeeReport(universeAppointments); 
+    filterAppointmentListLogic(universeAppointments);
   }
 
-  function calculateMonthlyProgress(monthlyAppointments) {
-       const detailProg = services.map(service => {
-         const objective = objectives.find(obj => obj.service_id === service.id);
-         const target = Number(objective?.target_appointments) || 0;
-         const attendedCount = monthlyAppointments.filter(app => 
-             app.service_id === service.id && app.status === 'confirmada' && app.attended
-         ).length;
-         const percentage = target > 0 ? ((attendedCount / target) * 100) : 0;
-         
-         const citados = monthlyAppointments.filter(app => app.service_id === service.id).length;
-         const confirmados = monthlyAppointments.filter(app => app.service_id === service.id && app.status === 'confirmada').length;
-         const nuevos = monthlyAppointments.filter(app => app.service_id === service.id && app.status === 'confirmada' && app.attended && app.is_new_client).length; 
-         const compradores = monthlyAppointments.filter(app => app.service_id === service.id && app.status === 'confirmada' && app.attended && (app.amount > 0)).length;
-         
-         const factReal = monthlyAppointments.filter(app => app.service_id === service.id && app.status === 'confirmada' && app.attended).reduce((acc, curr) => acc + (Number(curr.amount)||0), 0);
-         const factObj = target * (Number(service.estimated_billing) || 0);
-         
-         const pct_fact = factObj > 0 ? ((factReal / factObj) * 100) : 0;
-         const pct_captacion = target > 0 ? (citados/target)*100 : 0;
-         const pct_asistencia = citados > 0 ? (attendedCount/citados)*100 : 0;
-         const tasa_conv = attendedCount > 0 ? (compradores/attendedCount)*100 : 0;
+  // --- CÁLCULO POR SERVICIO (AGRUPADO POR NOMBRE) ---
+  function calculateServiceReport(universeApps) {
+       // 1. Identificar nombres únicos de servicios a mostrar
+       const uniqueNames = getUniqueServiceNames();
+       // Aplicar filtro de servicio si existe (por nombre)
+       // Aquí usamos filterServiceId para mantener coherencia de nombre de variable, aunque contiene el NOMBRE si usamos el selector nuevo
+       // O mejor, usamos filterServiceId si es 'all', o filtramos por ID si el selector envía ID. 
+       // Pero en el nuevo selector enviaremos NOMBRE. Asumamos que filterServiceId guarda el NOMBRE si viene del selector de nombres.
+       // REVISIÓN: En el JSX de abajo, el selector de servicio usa filterServiceId pero mapea NOMBRES. 
+       // Así que filterServiceId contendrá "Nutrición", no "5".
+       
+       const namesToShow = (filterServiceId !== 'all') 
+           ? uniqueNames.filter(name => name === filterServiceId) 
+           : uniqueNames;
 
-         return { 
-             serviceId: service.id, serviceName: service.name, 
-             target, attended: attendedCount, percentage,
-             citados, confirmados, nuevos, compradores, 
-             facturacion_real: factReal, 
-             facturacion_objetivo: factObj,
-             pct_captacion, pct_asistencia, tasa_conversion: tasa_conv, pct_facturacion: pct_fact
-         };
+       const rows = namesToShow.map(serviceName => {
+           // IDs de servicios que se llamen así
+           const matchingServiceIds = services
+               .filter(s => s.name === serviceName && (filterPharmacyId === 'all' || s.pharmacy_id.toString() === filterPharmacyId))
+               .map(s => s.id);
+
+           // Citas
+           const serviceApps = universeApps.filter(app => 
+               matchingServiceIds.includes(app.service_id) &&
+               (filterEmployeeId === 'all' || app.created_by_user_id === filterEmployeeId)
+           );
+
+           // Objetivos
+           const serviceObjs = objectives.filter(o => matchingServiceIds.includes(o.service_id));
+           const target = serviceObjs.reduce((sum, o) => sum + (o.target_appointments || 0), 0);
+
+           // Métricas
+           const citados = serviceApps.length;
+           const confirmados = serviceApps.filter(a => a.status === 'confirmada').length;
+           const nuevos = serviceApps.filter(a => a.status === 'confirmada' && a.attended && a.is_new_client).length;
+           const asistentes = serviceApps.filter(a => a.status === 'confirmada' && a.attended).length;
+           const compradores = serviceApps.filter(a => a.status === 'confirmada' && a.attended && (Number(a.amount) > 0)).length;
+           const factReal = serviceApps.filter(a => a.status === 'confirmada' && a.attended).reduce((acc, curr) => acc + (Number(curr.amount)||0), 0);
+           
+           let factObj = 0;
+           matchingServiceIds.forEach(id => {
+               const srv = services.find(s => s.id === id);
+               const obj = objectives.find(o => o.service_id === id);
+               if (srv && obj) factObj += (obj.target_appointments || 0) * (srv.estimated_billing || 0);
+           });
+
+           // Ratios
+           const pct_captacion = target > 0 ? (citados/target)*100 : 0;
+           const pct_asistencia = citados > 0 ? (asistentes/citados)*100 : 0;
+           const tasa_conv = asistentes > 0 ? (compradores/asistentes)*100 : 0;
+           const pct_fact = factObj > 0 ? (factReal/factObj)*100 : 0;
+
+           return {
+               serviceName: serviceName, 
+               target, citados, confirmados, nuevos, asistentes, compradores,
+               factReal, factObj, pct_captacion, pct_asistencia, tasa_conv, pct_fact
+           };
        });
 
-       const totalTarget = detailProg.reduce((sum, item) => sum + item.target, 0);
-       const totalAttended = detailProg.reduce((sum, item) => sum + item.attended, 0);
+       // Totales Globales
+       const totalTarget = rows.reduce((sum, item) => sum + item.target, 0);
+       const totalAttended = rows.reduce((sum, item) => sum + item.asistentes, 0);
        const overallPerc = totalTarget > 0 ? ((totalAttended / totalTarget) * 100) : 0;
-       
-       const totalCitados = detailProg.reduce((sum, item) => sum + item.citados, 0);
-       const totalConfirmados = detailProg.reduce((sum, item) => sum + item.confirmados, 0);
-       const totalCompradores = detailProg.reduce((sum, item) => sum + item.compradores, 0);
-       const totalFactReal = detailProg.reduce((sum, item) => sum + item.facturacion_real, 0);
-       const totalFactObj = detailProg.reduce((sum, item) => sum + item.facturacion_objetivo, 0);
+       const totalFactReal = rows.reduce((sum, item) => sum + item.factReal, 0);
+       const totalFactObj = rows.reduce((sum, item) => sum + item.factObj, 0);
+       const totalCitados = rows.reduce((sum, item) => sum + item.citados, 0);
+       const totalConfirmados = rows.reduce((sum, item) => sum + item.confirmados, 0);
+       const totalNuevos = rows.reduce((sum, item) => sum + item.nuevos, 0);
+       const totalCompradores = rows.reduce((sum, item) => sum + item.compradores, 0);
        const totalPctFact = totalFactObj > 0 ? (totalFactReal/totalFactObj)*100 : 0;
+       const totalPctCapt = totalTarget > 0 ? (totalCitados/totalTarget)*100 : 0;
 
        setMonthlyProgress({ 
            overall: { 
                target: totalTarget, attended: totalAttended, percentage: overallPerc,
-               citados: totalCitados, confirmados: totalConfirmados, compradores: totalCompradores,
-               facturacion_real: totalFactReal, facturacion_objetivo: totalFactObj, pct_facturacion: totalPctFact
+               citados: totalCitados, confirmados: totalConfirmados, nuevos: totalNuevos, compradores: totalCompradores,
+               facturacion_real: totalFactReal, facturacion_objetivo: totalFactObj, pct_facturacion: totalPctFact,
+               pct_captacion: totalPctCapt
            }, 
-           detailed: detailProg 
+           detailed: rows 
        });
   }
 
-  function calculateIndividualProgressLogic(monthlyAppointments) {
-       let employeeProfiles = employees.filter(emp => emp.role === 'empleado');
+  // --- CÁLCULO POR EMPLEADO ---
+  function calculateEmployeeReport(universeApps) {
+       let employeesToShow = employees.filter(emp => emp.role === 'empleado');
        if (filterPharmacyId !== 'all') {
-           employeeProfiles = employeeProfiles.filter(e => e.pharmacy_id.toString() === filterPharmacyId);
+           employeesToShow = employeesToShow.filter(e => e.pharmacy_id?.toString() === filterPharmacyId);
        }
        if (filterEmployeeId !== 'all') {
-           employeeProfiles = employeeProfiles.filter(e => e.id === filterEmployeeId);
+           employeesToShow = employeesToShow.filter(e => e.id === filterEmployeeId);
        }
-       
-       const servicesToShow = services.filter(s => {
-           const pMatch = filterPharmacyId === 'all' || s.pharmacy_id.toString() === filterPharmacyId;
-           const sMatch = filterServiceId === 'all' || s.id.toString() === filterServiceId;
-           return pMatch && sMatch;
-       });
-       
-       const individualData = employeeProfiles.map(employee => {
-         const serviceDetails = servicesToShow.map(service => {
-             if (service.pharmacy_id !== employee.pharmacy_id) return null;
 
-             const assignment = assignments.find(a => a.employee_id === employee.id && a.service_id === service.id);
-             const targetTotal = Number(assignment?.assigned_services_count) || 0;
-             const targetNew = Number(assignment?.target_new_clients) || 0;
+       const uniqueServiceNames = getUniqueServiceNames();
+       const namesToShow = (filterServiceId !== 'all') 
+           ? uniqueServiceNames.filter(n => n === filterServiceId) 
+           : uniqueServiceNames;
 
-             const myApps = monthlyAppointments.filter(app => 
-                 app.created_by_user_id === employee.id && 
-                 app.service_id === service.id && 
-                 app.status === 'confirmada' && 
-                 app.attended
-             );
-             const realTotal = myApps.length;
-             const realNew = myApps.filter(app => app.is_new_client).length;
+       const individualData = employeesToShow.map(employee => {
+         const serviceDetails = namesToShow.map(serviceName => {
+             const serviceInstance = services.find(s => s.name === serviceName && s.pharmacy_id === employee.pharmacy_id);
+             
+             let targetTotal = 0;
+             let targetNew = 0;
+             let realTotal = 0;
+             let realNew = 0;
 
-             return {
-                 serviceId: service.id, serviceName: service.name, targetTotal, targetNew, realTotal, realNew
-             };
+             if (serviceInstance) {
+                 const assignment = assignments.find(a => a.employee_id === employee.id && a.service_id === serviceInstance.id);
+                 if (assignment) {
+                     targetTotal = Number(assignment.assigned_services_count) || 0;
+                     targetNew = Number(assignment.target_new_clients) || 0;
+                 }
+                 const myApps = universeApps.filter(app => 
+                     app.created_by_user_id === employee.id && 
+                     app.service_id === serviceInstance.id && 
+                     app.status === 'confirmada' && 
+                     app.attended
+                 );
+                 realTotal = myApps.length;
+                 realNew = myApps.filter(app => app.is_new_client).length;
+             }
+             return { serviceName: serviceName, targetTotal, targetNew, realTotal, realNew };
          }).filter(Boolean);
 
          const totalTarget = serviceDetails.reduce((acc, s) => acc + s.targetTotal, 0);
@@ -248,19 +303,18 @@ export default function Reports({ profile }) {
          };
        });
 
-       if (profile.role === 'empleado') {
-           setIndividualProgress({ data: individualData.filter(item => item.employeeId === profile.id), displayedServices: servicesToShow });
-       } else {
-           setIndividualProgress({ data: individualData, displayedServices: servicesToShow });
-       }
+       // Filtramos para mostrar/ocultar bajas AQUI si quisiéramos, o en el render
+       // Para consistencia con la tabla, pasamos todos y filtramos en el map
+       setIndividualProgress({ data: individualData, displayedServices: namesToShow });
   }
 
-  function filterAppointmentListLogic() {
+  // --- FILTRO LISTADO ---
+  function filterAppointmentListLogic(universeApps) {
      const term = searchTerm.toLowerCase();
      
-     const filtered = allAppointments.filter(app => {
-        const pharmacyMatch = (filterPharmacyId === 'all' || app.pharmacy_id?.toString() === filterPharmacyId?.toString());
-        const serviceMatch = (filterServiceId === 'all' || app.service_id?.toString() === filterServiceId);
+     const filtered = universeApps.filter(app => {
+        // Filtro por NOMBRE de servicio
+        const serviceMatch = (filterServiceId === 'all' || app.services?.name === filterServiceId);
         const employeeMatch = (filterEmployeeId === 'all' || app.created_by_user_id === filterEmployeeId);
         const statusMatch = (filterStatus === 'all') ||
                             (filterStatus === 'confirmada' && app.status === 'confirmada' && !app.attended) ||
@@ -278,7 +332,7 @@ export default function Reports({ profile }) {
             dateMatch = (appDate === filterDate);
         }
 
-        return pharmacyMatch && serviceMatch && employeeMatch && statusMatch && searchMatch && dateMatch;
+        return serviceMatch && employeeMatch && statusMatch && searchMatch && dateMatch;
      })
      .sort((a,b) => new Date(a.appointment_time) - new Date(b.appointment_time));
      
@@ -299,7 +353,7 @@ export default function Reports({ profile }) {
 
   async function handleUpdateField(appointmentId, fieldUpdate) {
       const { error } = await supabase.from('appointments').update(fieldUpdate).eq('id', appointmentId);
-      if (error) { alert(`Error al actualizar: ${error.message}`); loadAllData(); }
+      if (error) { alert(`Error: ${error.message}`); loadAllData(); }
       else { loadAllData(); }
   }
   function handleAmountInputChange(appointmentId, newAmount) {
@@ -315,15 +369,13 @@ export default function Reports({ profile }) {
   }
 
   // --- EXPORTACIÓN ---
-  function downloadCSV(data, filename, currentStart, currentEnd) {
+  function downloadCSV(data, filename) {
       try {
           const csv = Papa.unparse(data, { delimiter: ";", header: true });
           const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
           const link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
-          const s = currentStart || startDate;
-          const e = currentEnd || endDate;
-          link.download = `${filename}_${s}_${e}.csv`;
+          link.download = `${filename}_${startDate}_${endDate}.csv`;
           document.body.appendChild(link); link.click(); document.body.removeChild(link);
       } catch (e) { alert("Error exportando: " + e.message); }
   }
@@ -334,14 +386,13 @@ export default function Reports({ profile }) {
           ...d,
           pct_captacion: (Number(d.pct_captacion) || 0).toFixed(1) + '%',
           pct_asistencia: (Number(d.pct_asistencia) || 0).toFixed(1) + '%',
-          tasa_conv: (Number(d.tasa_conversion) || 0).toFixed(1) + '%',
-          pct_fact: (Number(d.pct_facturacion) || 0).toFixed(1) + '%'
+          tasa_conv: (Number(d.tasa_conv) || 0).toFixed(1) + '%',
+          pct_fact: (Number(d.pct_fact) || 0).toFixed(1) + '%'
       }));
-      downloadCSV(data, `servicios`, startDate, endDate);
+      downloadCSV(data, `servicios`);
   }
 
   const exportEmployeeReport = () => {
-      // Filtrar inactivos si aplica para la exportación también
       const dataToExport = individualProgress.data.filter(item => showInactiveEmployees || item.active !== false);
       if (!dataToExport.length) return alert("No hay datos.");
       
@@ -352,14 +403,14 @@ export default function Reports({ profile }) {
                   Empleado: emp.employeeName,
                   Servicio: srv.serviceName,
                   Obj_Total: srv.targetTotal,
-                  Real_Total: srv.realTotal,
                   Obj_Nuevos: srv.targetNew,
+                  Real_Total: srv.realTotal,
                   Real_Nuevos: srv.realNew,
                   Cumplimiento_Pct: (srv.targetTotal > 0 ? (srv.realTotal/srv.targetTotal)*100 : 0).toFixed(1) + '%'
               });
           });
       });
-      downloadCSV(flatData, `empleados`, startDate, endDate);
+      downloadCSV(flatData, `empleados`);
   }
 
   const exportAppointmentList = () => {
@@ -380,8 +431,7 @@ export default function Reports({ profile }) {
           Importe: app.amount,
           Creador: app.profiles?.full_name
       }));
-      const fName = filterDate ? `listado_citas_${filterDate}` : `listado_citas`;
-      downloadCSV(dataToExport, fName, startDate, endDate);
+      downloadCSV(dataToExport, `listado_citas`);
   }
 
 
@@ -409,9 +459,10 @@ export default function Reports({ profile }) {
 
           <div className="filter-group">
               <label>Servicio:</label>
+              {/* SELECT POR NOMBRE */}
               <select value={filterServiceId} onChange={handleServiceFilterChange}>
                   <option value="all">Todos</option>
-                  {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {getUniqueServiceNames().map(name => <option key={name} value={name}>{name}</option>)}
               </select>
           </div>
           <div className="filter-group">
@@ -425,29 +476,30 @@ export default function Reports({ profile }) {
 
 
       {/* --- Resumen General --- */}
-      <CollapsibleCard title="Resumen del Periodo (Filtrado)" 
-      >
+      <CollapsibleCard title="Resumen del Periodo (Filtrado)" defaultOpen={true}>
         <div className="summary-metrics">
           <div><strong>Obj. Citas:</strong><span>{monthlyProgress.overall.target}</span></div>
+          <div><strong>Citados Reales:</strong><span>{monthlyProgress.overall.citados}</span></div>
+          <div><strong>Confirmados:</strong><span>{monthlyProgress.overall.confirmados}</span></div>
           <div><strong>Atendidas:</strong><span>{monthlyProgress.overall.attended}</span></div>
+          <div><strong>Compradores:</strong><span>{monthlyProgress.overall.compradores}</span></div>
           <div style={{width: '100%'}}>
               <strong>% Cumpl. Citas:</strong> <span className="percentage">{(Number(monthlyProgress.overall.percentage)||0).toFixed(1)}%</span>
               <ProgressBar percentage={monthlyProgress.overall.percentage} />
           </div>
-          <div><strong>Facturación:</strong><span>{(Number(monthlyProgress.overall.facturacion_real)||0).toFixed(2)}€</span></div>
-          <div><strong>% Captación:</strong><span>{(Number(monthlyProgress.overall.pct_captacion)||0).toFixed(1)}%</span></div>
+          <div><strong>Fact. Real:</strong><span>{(Number(monthlyProgress.overall.facturacion_real)||0).toFixed(2)}€</span></div>
         </div>
       </CollapsibleCard>
 
-      {/* --- Detalle Mensual --- */}
+      {/* --- Detalle Servicio (AGRUPADO POR NOMBRE) --- */}
       <CollapsibleCard title="Detalle por Servicio" actionElement={<button className="button button-small" onClick={exportServiceDetail}>Descargar CSV</button>}>
         <div className="table-wrapper">
             <table className="service-table report-table detailed-report">
               <thead><tr><th>Servicio</th><th>Obj.</th><th>Citados</th><th>Confirm.</th><th>Nuevos</th><th>Atend.</th><th>Compr.</th><th>% Capta.</th><th>% Asist.</th><th>% Conv.</th><th>Fact. Obj</th><th>Fact. Real</th><th>% Fact.</th></tr></thead>
               <tbody>
                 {monthlyProgress.detailed.length === 0 ? (<tr><td colSpan="13">No hay datos.</td></tr>) : (
-                  monthlyProgress.detailed.map((item) => (
-                    <tr key={item.serviceId}>
+                  monthlyProgress.detailed.map((item, idx) => (
+                    <tr key={idx}>
                         <td>{item.serviceName} {filterPharmacyId === 'all' && <small style={{display:'block', color:'#666'}}>({item.pharmacyName})</small>}</td>
                         <td>{item.target}</td><td>{item.citados}</td><td>{item.confirmados}</td>
                         <td>{item.nuevos}</td><td>{item.asistentes}</td><td>{item.compradores}</td>
@@ -474,26 +526,20 @@ export default function Reports({ profile }) {
         </div>
       </CollapsibleCard>
 
-      {/* --- Cumplimiento Individual --- */}
+      {/* --- Empleados (Columnas = Nombres Servicios) --- */}
       <CollapsibleCard title="Cumplimiento por Empleado" actionElement={<button className="button button-small" onClick={exportEmployeeReport}>Descargar CSV</button>}>
-        
-        {/* --- Checkbox Mostrar Bajas --- */}
         <div style={{marginBottom: '10px', textAlign: 'right'}}>
             <label style={{fontSize:'0.9rem', cursor:'pointer'}}>
                 <input type="checkbox" checked={showInactiveEmployees} onChange={e => setShowInactiveEmployees(e.target.checked)} /> Mostrar Bajas
             </label>
         </div>
-
         <div className="table-wrapper">
             <table className="service-table report-table">
                 <thead>
                     <tr>
                         <th style={{minWidth: '150px'}}>Empleado</th>
-                        {individualProgress.displayedServices && individualProgress.displayedServices.map(s => (
-                            <th key={s.id} style={{textAlign: 'center', fontSize:'0.85em'}}>{s.name}<br/>
-                            {filterPharmacyId === 'all' && s.pharmacies && <small>({s.pharmacies.name})</small>}
-                            <br/><small>(Real/Obj)</small>
-                            </th>
+                        {individualProgress.displayedServices && individualProgress.displayedServices.map(name => (
+                            <th key={name} style={{textAlign: 'center', fontSize:'0.85em'}}>{name}<br/>(Real/Obj)</th>
                         ))}
                         <th>Total %</th>
                     </tr>
@@ -501,7 +547,7 @@ export default function Reports({ profile }) {
                 <tbody>
                     {(!individualProgress.data || individualProgress.data.length === 0) ? (<tr><td colSpan="10">No hay datos.</td></tr>) : (
                         individualProgress.data
-                           .filter(item => showInactiveEmployees || item.active !== false) // <-- Filtra inactivos
+                           .filter(item => showInactiveEmployees || item.active !== false)
                            .sort((a, b) => {
                                if (a.active !== false && b.active === false) return -1;
                                if (a.active === false && b.active !== false) return 1;
@@ -509,16 +555,11 @@ export default function Reports({ profile }) {
                            })
                            .map((item) => (
                             <tr key={item.employeeId} style={item.active===false ? {backgroundColor:'#ffebee', color:'#b71c1c'} : {}}>
-                                <td>
-                                    {item.employeeName} 
-                                    {item.active===false && <span style={{display:'block', fontSize:'0.8em', fontWeight:'bold'}}> (BAJA)</span>}
-                                </td>
-                                {item.serviceDetails.map(sd => (
-                                    <td key={sd.serviceId} style={{textAlign: 'center'}}>
+                                <td>{item.employeeName} {item.active===false && <small>(Baja)</small>}</td>
+                                {item.serviceDetails.map((sd, i) => (
+                                    <td key={i} style={{textAlign: 'center'}}>
                                         <div style={{fontWeight: 'bold'}}>{sd.realTotal} / {sd.targetTotal}</div>
-                                        <div style={{fontSize: '0.85em', color: item.active===false ? '#b71c1c' : 'green'}}>
-                                            N: {sd.realNew} / {sd.targetNew}
-                                        </div>
+                                        <div style={{fontSize: '0.85em', color: item.active===false ? '#b71c1c' : 'green'}}>N: {sd.realNew} / {sd.targetNew}</div>
                                     </td>
                                 ))}
                                 <td>
@@ -533,12 +574,12 @@ export default function Reports({ profile }) {
         </div>
       </CollapsibleCard>
 
-      {/* --- Lista Principal --- */}
-      <CollapsibleCard title="Listado de Citas / Clientes"  actionElement={<button className="button button-small" onClick={exportAppointmentList}>Descargar CSV</button>}>
+      {/* --- Listado --- */}
+      <CollapsibleCard title="Listado de Citas / Clientes" defaultOpen={true} actionElement={<button className="button button-small" onClick={exportAppointmentList}>Descargar CSV</button>}>
         <div className="report-controls list-filters" style={{borderTop:'none', paddingTop:0}}>
             <div className="filter-group"><label>Estado:</label><select value={filterStatus} onChange={handleStatusFilterChange}><option value="all">Todas</option><option value="confirmada">Confirmadas</option><option value="reserva">Reservas</option><option value="realizada">Realizadas</option></select></div>
             <div className="filter-group"><label>Buscar:</label><input type="search" value={searchTerm} onChange={handleSearchTermChange} placeholder="Cliente, Tel..." /></div>
-            <div className="filter-group"><label>Fecha Cita (Específica):</label><input type="date" value={filterDate} onChange={handleDateFilterChange} className="search-input" /></div>
+            <div className="filter-group"><label>Fecha:</label><input type="date" value={filterDate} onChange={handleDateFilterChange} className="search-input" /></div>
         </div>
 
         <div className="table-wrapper">
