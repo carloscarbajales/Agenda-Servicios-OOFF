@@ -1,4 +1,5 @@
-import logoTrebol from './assets/logo.png'
+import { supabase } from './supabaseClient'
+import logoTrebol from './assets/logo.png' 
 
 export default function Navbar({ 
   profile, 
@@ -33,7 +34,7 @@ export default function Navbar({
 
       <div className="navbar-right" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
         
-        {/* Selector Modo Quiosco (Solo si hay lista de empleados) */}
+        {/* Selector Modo Quiosco */}
         {employees && employees.length > 0 && (
           <div className="employee-selector-container" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label htmlFor="quick-employee-select" style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>Atendiendo:</label>
@@ -52,9 +53,18 @@ export default function Navbar({
         )}
 
         <span className="navbar-user" title={`Usuario técnico: ${profile.email}`}>
-           {/* Muestra quién está 'operando' realmente */}
            {activeName} ({profile.role})
         </span>
+
+        {/* --- NUEVO: Botón Mi Clave --- */}
+        <button 
+           className="button-secondary" 
+           onClick={() => onNavigate('profile')} 
+           style={{marginRight: '5px', fontSize: '0.8rem', padding: '4px 8px'}}
+        >
+           Mi Clave
+        </button>
+        {/* ---------------------------- */}
         
         <button className="button-secondary" onClick={onLogout}>
           Salir

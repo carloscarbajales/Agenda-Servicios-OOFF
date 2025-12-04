@@ -68,7 +68,7 @@ body {
 .navbar-brand-text {
   font-size: 1.3rem;
   font-weight: 800;
-  color: #2e7d32; /* Verde Trébol */
+  color: #2e7d32;
   letter-spacing: -0.5px;
 }
 
@@ -84,7 +84,7 @@ body {
 }
 
 .nav-link:hover {
-  background-color: #f0fdf4; /* Verde muy pálido */
+  background-color: #f0fdf4;
   color: #1b5e20;
 }
 
@@ -173,7 +173,7 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #eaedef;
+  border: 1px solid #25af00;
 }
 
 /* Títulos */
@@ -212,10 +212,9 @@ h3 {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
-  min-width: 100%; /* Ocupa el ancho disponible */
+  min-width: 100%;
 }
 
-/* Para tablas muy anchas en informes */
 .detailed-report {
     min-width: 1200px;
 }
@@ -240,12 +239,10 @@ h3 {
 .service-table tr:last-child td { border-bottom: none; }
 .service-table tr:hover { background-color: #f8fdf9; }
 
-/* Celdas de acción */
 .actions-cell { text-align: right; }
 .actions-cell button { margin-left: 5px; }
 .actions-cell-center { text-align: center; }
 
-/* Inputs pequeños en tablas */
 .amount-input, .assignment-input {
     padding: 6px;
     border: 1px solid #ced4da;
@@ -255,19 +252,18 @@ h3 {
     font-family: 'Nunito', sans-serif;
 }
 
-/* --- 7. FILTROS (Informes y Calendario) --- */
+/* --- 7. FILTROS --- */
 .report-controls, .calendar-filters {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
     align-items: flex-end;
-    background-color: #fff; /* Fondo blanco dentro del contenedor gris de la app */
+    background-color: #fff;
     padding: 20px;
     border-radius: 12px;
     margin-bottom: 20px;
     border: 1px solid #e9ecef;
 }
-/* Si están dentro de una tarjeta, quita el borde extra */
 .report-card .report-controls {
     border: none;
     background-color: #f8f9fa;
@@ -295,33 +291,28 @@ h3 {
     font-size: 0.95rem;
 }
 
-/* Botón exportar alineado a la derecha */
 .export-button-container {
     text-align: right;
     margin-bottom: 15px;
 }
 
-/* --- 8. PANELES DE CONFIGURACIÓN (GRID Y ACORDEÓN) --- */
-
-/* Contenedor principal del acordeón */
+/* --- 8. PANELES DE CONFIGURACIÓN (GRID) --- */
 .settings-grid-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* Cabecera del acordeón */
 .card-header {
   transition: background-color 0.2s;
   padding: 10px;
   border-radius: 8px;
-  user-select: none; /* Evita seleccionar texto al hacer clic */
+  user-select: none;
 }
 .card-header:hover {
   background-color: #f1f3f5;
 }
 
-/* Contenido del acordeón */
 .card-content {
     animation: fadeIn 0.3s ease-in-out;
 }
@@ -330,27 +321,22 @@ h3 {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* GRID DEL FORMULARIO */
 .service-form {
     background-color: #fff;
-    /* padding: 0;  Ya está dentro de la tarjeta */
 }
 
 .form-grid {
   display: grid;
-  /* Columnas automáticas de mínimo 220px */
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px; /* Espacio entre columnas/filas */
-  align-items: end; /* Alinea inputs y botón abajo */
+  gap: 20px;
+  align-items: end;
   margin-bottom: 25px;
 }
 
-/* Elementos que ocupan todo el ancho en el grid */
 .full-width-select, .day-selector {
     grid-column: 1 / -1;
 }
 
-/* Estilo de los grupos label+input en el grid */
 .form-grid > div, .form-group {
   display: flex;
   flex-direction: column;
@@ -363,11 +349,7 @@ h3 {
   color: #444;
 }
 
-.form-grid input, 
-.form-grid select,
-.form-group input,
-.form-group select,
-.form-group textarea {
+.form-grid input, .form-grid select, .form-group input, .form-group select, .form-group textarea {
   padding: 10px 12px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -379,21 +361,17 @@ h3 {
   box-sizing: border-box;
 }
 
-.form-grid input:focus, 
-.form-grid select:focus,
-.form-group input:focus {
+.form-grid input:focus, .form-grid select:focus, .form-group input:focus {
   outline: none;
   border-color: #2e7d32;
   box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
 }
 
-/* Botón dentro del grid */
 .form-grid .button {
-    height: 42px; /* Misma altura visual que los inputs */
+    height: 42px;
     width: 100%;
 }
 
-/* Checkboxes de días */
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;
@@ -412,91 +390,70 @@ h3 {
     cursor: pointer;
 }
 
-/* --- 9. FULLCALENDAR --- */
-.fc {
-    font-family: 'Nunito', sans-serif;
-}
-.fc-toolbar-title {
-    font-size: 1.5em !important;
-    font-weight: 700;
-    color: #2c3e50;
-}
-.fc-button-primary {
-    background-color: #2e7d32 !important;
-    border-color: #2e7d32 !important;
-    font-weight: 600 !important;
-    text-transform: capitalize;
-}
-.fc-button-primary:hover {
-    background-color: #1b5e20 !important;
-    border-color: #1b5e20 !important;
-}
-.fc-button-active {
-    background-color: #1b5e20 !important;
-}
-.fc-col-header-cell-cushion {
-    color: #555;
-    text-transform: uppercase;
-    font-size: 0.85rem;
-    padding: 10px 0 !important;
-}
-.fc-daygrid-day-number {
-    color: #444;
-    font-weight: 600;
-    padding: 8px !important;
-}
-.fc-day-today {
-    background-color: #f1f8f3 !important; /* Verde muy suave para hoy */
-}
-.fc-day-sun {
-    background-color: #fafafa;
+/* ... (Resto de estilos generales) ... */
+
+/* --- ESTILOS CALENDARIO Y LEYENDA --- */
+
+.calendar-wrapper {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
 }
 
-/* Eventos */
-.fc-event-main {
-  border-left: 5px solid transparent !important;
-  padding: 4px 6px !important;
-  color: rgb(12, 12, 12) !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 4px;
-  font-weight: 600;
+.calendar-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.calendar-legend {
+  width: 220px;
+  background: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  flex-shrink: 0;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.legend-title {
+  margin-top: 0;
+  font-size: 1rem;
+  font-weight: bold;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
   font-size: 0.85rem;
 }
-.fc-daygrid-event:hover { opacity: 0.9; transform: scale(1.01); transition: transform 0.1s; }
 
-.event-confirmada .fc-event-main { border-left-color: #0d6efd !important; }
-.event-reserva .fc-event-main { border-left-color: #fd7e14 !important; opacity: 0.85; }
-.event-reserva .fc-event-title { font-style: italic; }
-
-/* Horarios de Fondo */
-.event-background-schedule {
-    opacity: 0.15 !important;
-    border: 1px dashed rgba(0,0,0,0.2) !important;
-    border-radius: 4px;
-    color: transparent !important;
-    font-size: 0px !important;
-}
-.fc-bgevent { pointer-events: none; }
-
-/* Color de fondo dinámico */
-.fc-daygrid-event, .fc-timegrid-event {
-    cursor: pointer;
-    background-color: var(--fc-event-bg-color, #3788d8) !important;
-    border-color: var(--fc-event-border-color, #3788d8) !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    border: none;
-}
-/* Truco CSS Variables */
-.fc-daygrid-event[style*="background-color:"],
-.fc-timegrid-event[style*="background-color:"] {
-  --fc-event-bg-color: ; --fc-event-border-color: ;
-  background-color: var(--fc-event-bg-color-computed) !important;
-  border-color: var(--fc-event-border-color-computed) !important;
+.legend-color-box {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
-/* --- 10. MODAL CITAS --- */
+/* Reseteo para FullCalendar */
+.fc-event {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* En móviles, leyenda abajo */
+@media (max-width: 900px) {
+  .calendar-wrapper { flex-direction: column; }
+  .calendar-legend { width: 100%; margin-top: 20px; }
+}
+
+/* --- 10. MODAL CITAS Y LOGIN --- */
 .modal-backdrop {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
@@ -511,6 +468,8 @@ h3 {
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   width: 90%; max-width: 550px;
   animation: slideIn 0.2s ease-out;
+  max-height: 90vh; /* Evita que se salga en pantallas pequeñas */
+  overflow-y: auto; /* Scroll si es muy alto */
 }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
@@ -530,15 +489,13 @@ h3 {
   display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;
 }
 
-/* Mensaje Login */
 .login-container {
     max-width: 400px;
     margin: 100px auto;
     text-align: center;
 }
-/* ... (Mantén todo el código anterior igual) ... */
 
-/* --- 11. BARRA DE PROGRESO (INFORMES) --- */
+/* Barra progreso informes */
 .progress-container {
   width: 100%;
   background-color: #e9ecef;
@@ -547,27 +504,12 @@ h3 {
   height: 10px;
   overflow: hidden;
 }
-
 .progress-bar {
   height: 100%;
-  background-color: #2e7d32; /* Verde Trébol */
+  background-color: #2e7d32;
   border-radius: 6px;
   transition: width 0.5s ease-in-out;
 }
-
-/* Colores dinámicos para la barra según porcentaje */
-.progress-bar.low { background-color: #dc3545; } /* Rojo si < 30% */
-.progress-bar.medium { background-color: #ffc107; } /* Amarillo si < 70% */
-.progress-bar.high { background-color: #2e7d32; } /* Verde si >= 70% */
-
-/* Ajuste para que los acordeones en Informes se vean bien */
-.report-card .card-header {
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    user-select: none;
-}
-.report-card .card-header:hover {
-    opacity: 0.8;
-}
+.progress-bar.low { background-color: #dc3545; }
+.progress-bar.medium { background-color: #ffc107; }
+.progress-bar.high { background-color: #2e7d32; }

@@ -7,6 +7,7 @@ import Settings from './Settings'
 import Reports from './Reports'
 import Manual from './Manual'
 import Navbar from './Navbar'
+import ChangePassword from './ChangePassword' // <-- 1. IMPORTAR
 import './App.css'
 
 function App() {
@@ -124,6 +125,8 @@ function App() {
           {view === 'settings' && <Settings key={view} profile={profile} />}
           {view === 'reports' && <Reports key={view} profile={profile} />}
           {view === 'manual' && <Manual profile={profile} />}
+          {/* --- NUEVO: Renderizar ChangePassword --- */}
+          {view === 'profile' && <ChangePassword />}
         </main>
       </div>
     )

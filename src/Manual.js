@@ -1,10 +1,9 @@
 import { useState } from 'react'
 
-// Reutilizamos el componente de tarjeta colapsable para mantener el estilo
 function CollapsibleSection({ title, children, defaultOpen = false }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="report-card"> {/* Reutilizamos la clase CSS de tarjetas */}
+    <div className="report-card">
       <div 
         className="card-header" 
         onClick={() => setIsOpen(!isOpen)} 
@@ -24,82 +23,73 @@ function CollapsibleSection({ title, children, defaultOpen = false }) {
 
 export default function Manual({ profile }) {
   return (
-    <div className="reports-container"> {/* Reutilizamos el contenedor */}
+    <div className="reports-container">
       <h1>Manual de Instrucciones</h1>
-      <p>Bienvenido a la plataforma de gestión de <strong>Farmacias Trébol</strong>. A continuación encontrarás una guía detallada según tu rol: <strong>{profile.role}</strong>.</p>
+      <p>Guía rápida para el sistema de gestión <strong>Farmacias Trébol</strong>. Rol actual: <strong>{profile.role}</strong>.</p>
 
-      {/* 1. CALENDARIO */}
-      <CollapsibleSection title="📅 Uso del Calendario y Citas" defaultOpen={true}>
-        <p>El calendario es la herramienta principal para gestionar el día a día.</p>
+      {/* 1. MODO QUIOSCO (Lo más importante para empleados) */}
+      <CollapsibleSection title="🚀 Modo Mostrador (Quiosco)" defaultOpen={true}>
+        <p>El sistema está diseñado para que múltiples empleados usen el mismo ordenador sin cerrar sesión.</p>
+        <ol>
+            <li>Inicia sesión una vez con el usuario de la farmacia (ej. <em>mostrador@...</em>).</li>
+            <li>En la barra verde superior, verás un selector llamado <strong>"Atendiendo:"</strong>.</li>
+            <li><strong>¡Importante!</strong> Antes de trabajar, selecciona tu nombre en esa lista.</li>
+            <li>Todas las citas que crees se guardarán a tu nombre para tus objetivos personales.</li>
+            <li>Cuando termines tu turno, simplemente deja el ordenador para el siguiente compañero.</li>
+        </ol>
+      </CollapsibleSection>
+
+      {/* 2. CALENDARIO */}
+      <CollapsibleSection title="📅 Calendario y Citas">
         <ul>
-            <li><strong>Ver Disponibilidad:</strong> Los horarios de los servicios aparecen como bloques de color tenue en el fondo. Si no hay bloque de color, no hay servicio ese día.</li>
-            <li><strong>Crear Cita:</strong> Haz clic en cualquier hueco (o día) del calendario. Se abrirá un formulario.
+            <li><strong>Ver Horarios:</strong> Los servicios disponibles aparecen como bloques de color tenue con el nombre del servicio.</li>
+            <li><strong>Leyenda:</strong> A la derecha tienes la leyenda de colores para identificar cada servicio.</li>
+            <li><strong>Crear Cita:</strong> 
                 <ul>
-                    <li>Si hay huecos libres, selecciona la hora en el desplegable.</li>
-                    <li><strong>Reservas (Lista de Espera):</strong> Si no hay huecos, el sistema te ofrecerá guardar la cita como "Reserva". Estas citas tienen un borde naranja.</li>
+                    <li>Haz clic en un hueco de horario o en el día.</li>
+                    <li>Si seleccionas un horario, el servicio ya vendrá pre-seleccionado.</li>
+                    <li><strong>Obligatorio:</strong> Teléfono y Tarjeta Trébol.</li>
+                    <li>Marca <strong>"Nuevo Cliente"</strong> si es la primera vez que viene.</li>
                 </ul>
             </li>
-            <li><strong>Datos del Cliente:</strong> Es obligatorio introducir el Teléfono y la Tarjeta Trébol. Puedes marcar "Nuevo Cliente" para seguimiento estadístico.</li>
-            <li><strong>Editar/Borrar:</strong> Haz clic sobre una cita existente (borde azul o naranja) para ver sus detalles, marcar asistencia o borrarla.</li>
-            <li><strong>Filtros:</strong> Usa la barra superior para filtrar el calendario por Empleado o Servicio.</li>
+            <li><strong>Reservas:</strong> Si no hay huecos libres, la cita se guardará como "Reserva" (Lista de Espera) y tendrá un borde <strong>Naranja</strong>. Las citas confirmadas tienen borde <strong>Azul</strong>.</li>
+            <li><strong>Gestión Diaria:</strong> Al finalizar la cita, entra, marca "Ha Acudido" e introduce el Importe cobrado.</li>
         </ul>
       </CollapsibleSection>
 
-      {/* 2. GESTIÓN Y CONFIGURACIÓN */}
-      <CollapsibleSection title="⚙️ Configuración del Sistema">
-        <p>En esta pestaña se define la estructura de la farmacia. Visible para Admin, Gestor y Gerente.</p>
+      {/* 3. GESTIÓN DE EMPLEADOS */}
+      <CollapsibleSection title="👥 Gestión de Personal (Admin/Gerente)">
+        <p>Hay dos formas de dar de alta personal:</p>
         <ul>
-            <li><strong>Farmacias (Solo Admin):</strong> Alta y baja de las farmacias del grupo.</li>
-            <li><strong>Servicios:</strong> Define qué servicios ofrece la farmacia (ej. Nutrición, SPD).
+            <li><strong>Empleado (Ficha Local):</strong> Ideal para personal de mostrador.
                 <ul>
-                    <li>Puedes definir el tiempo por cita, la facturación estimada y el <strong>% Objetivo de Nuevos Clientes</strong>.</li>
+                    <li>Selecciona Rol: Empleado.</li>
+                    <li><strong>NO</strong> marques "Con Login".</li>
+                    <li>Solo pide Nombre. El empleado aparecerá en el selector del "Modo Quiosco".</li>
                 </ul>
             </li>
-            <li><strong>Horarios:</strong> Define cuándo se ofrecen los servicios.
+            <li><strong>Gerente/Gestor (Con Acceso):</strong> Para quien necesita entrar desde su casa/móvil.
                 <ul>
-                    <li><strong>Recurrente:</strong> Ej. "Todos los lunes" o "El primer martes de cada mes".</li>
-                    <li><strong>Puntual:</strong> Para días específicos o campañas.</li>
+                    <li>Selecciona Rol: Gerente.</li>
+                    <li>Se activará "Con Login".</li>
+                    <li>Introduce Email y Contraseña. El usuario podrá entrar con esas credenciales.</li>
                 </ul>
             </li>
-            <li><strong>Empleados:</strong> Envía invitaciones por email a nuevos usuarios y gestiona sus roles.
-                <ul>
-                    <li><strong>Métricas:</strong> Define las "Horas de Mostrador" y "Días Trabajados" para el reparto de objetivos.</li>
-                </ul>
-            </li>
-            <li><strong>Objetivos:</strong>
-                <ul>
-                    <li>Define el objetivo total de citas mensuales.</li>
-                    <li>Usa el botón <strong>"Reparto Automático"</strong> para distribuir los objetivos entre los empleados basándose en sus horas de mostrador.</li>
-                </ul>
-            </li>
+            <li><strong>Bajas:</strong> No borres empleados para no perder sus datos históricos. Usa el botón <strong>"Baja"</strong> para desactivarlos (desaparecerán del selector pero sus datos quedan en informes).</li>
         </ul>
       </CollapsibleSection>
 
-      {/* 3. INFORMES */}
-      <CollapsibleSection title="📊 Informes y Análisis">
-        <p>Herramientas para el seguimiento del negocio y la operativa diaria.</p>
+      {/* 4. OBJETIVOS E INFORMES */}
+      <CollapsibleSection title="📊 Objetivos e Informes">
         <ul>
-            <li><strong>Resumen Mensual:</strong> Vista rápida de objetivos vs. realizados del mes en curso.</li>
-            <li><strong>Detalle por Servicio:</strong> Tabla desglosada con KPIs (Captación, Asistencia, Conversión, Facturación).</li>
-            <li><strong>Cumplimiento Individual:</strong> Muestra cómo va cada empleado respecto a su objetivo asignado (Total y Nuevos Clientes).</li>
-            <li><strong>Listado de Citas / Clientes:</strong> Herramienta operativa.
+            <li><strong>Objetivos:</strong> En Configuración, define cuántas citas quieres conseguir por servicio. Luego usa el <strong>"Reparto Automático"</strong> para distribuir esa meta entre los empleados según sus horas de mostrador.</li>
+            <li><strong>Informes:</strong>
                 <ul>
-                    <li>Usa los filtros (Estado, Servicio, Empleado) y el <strong>Buscador</strong> para encontrar citas.</li>
-                    <li>Marca rápidamente "Recordatorio Enviado" o "Ha Acudido" desde la tabla.</li>
-                    <li>Introduce el <strong>Importe</strong> final para cerrar la cita.</li>
+                    <li>Usa los filtros de Fecha (Desde/Hasta) para ver datos de cualquier periodo.</li>
+                    <li>La tabla "Cumplimiento Individual" te muestra el % de objetivo conseguido por cada empleado.</li>
+                    <li>Puedes descargar todos los datos a Excel (CSV).</li>
                 </ul>
             </li>
-            <li><strong>Exportación:</strong> Usa los botones de "Descargar CSV" para llevarte los datos a Excel.</li>
-        </ul>
-      </CollapsibleSection>
-
-      {/* 4. ROLES Y PERMISOS */}
-      <CollapsibleSection title="🛡️ Roles y Permisos">
-        <ul>
-            <li><strong>Admin:</strong> Acceso total a todas las farmacias y configuraciones globales.</li>
-            <li><strong>Gestor:</strong> Gestión integral de las farmacias asignadas.</li>
-            <li><strong>Gerente:</strong> Gestión integral de SU farmacia. Puede configurar servicios y horarios.</li>
-            <li><strong>Empleado:</strong> Puede ver y gestionar el calendario, ver sus propios objetivos y el listado de clientes. No puede modificar la configuración estructural (servicios, horarios globales).</li>
         </ul>
       </CollapsibleSection>
 

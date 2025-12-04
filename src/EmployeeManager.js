@@ -6,12 +6,21 @@ export default function EmployeeManager({ profile }) {
   const [pharmacies, setPharmacies] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Filtro visual
+  const [showInactive, setShowInactive] = useState(false); 
+  // Estado Edición
+  const [editingEmployee, setEditingEmployee] = useState(null);
 
-  // Formulario
-  const [newEmail, setNewEmail] = useState('')
+  // Formulario Crear
   const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState('empleado')
   const [newPharmacyId, setNewPharmacyId] = useState('')
+  
+  // Campos Login
+  const [hasLogin, setHasLogin] = useState(false) 
+  const [newEmail, setNewEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
 
   useEffect(() => { loadData() }, [profile])
 
@@ -20,158 +29,194 @@ export default function EmployeeManager({ profile }) {
     let pharmacyQuery = supabase.from('pharmacies').select('*')
     let employeeQuery = supabase.from('profiles').select('*, pharmacies(id, name)')
 
-    if (profile.role !== 'admin') {
+    if (profile.role !== 'admin' && profile.role !== 'gestor') {
       const myPharmacyId = profile.pharmacy_id
       if (myPharmacyId) {
         pharmacyQuery = pharmacyQuery.eq('id', myPharmacyId)
         employeeQuery = employeeQuery.eq('pharmacy_id', myPharmacyId)
         setNewPharmacyId(myPharmacyId)
-      } else if (profile.role === 'gestor') { /* ... */ }
-      else { setLoading(false); return; }
+      } else { setLoading(false); return; }
     }
-
+    
     try {
       const [pharmacyRes, employeeRes] = await Promise.all([pharmacyQuery, employeeQuery])
       setPharmacies(pharmacyRes.data || [])
       setEmployees((employeeRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')))
       
-      if (profile.role === 'admin' && pharmacyRes.data?.length > 0 && !newPharmacyId) {
+      if ((profile.role === 'admin' || profile.role === 'gestor') && pharmacyRes.data?.length > 0 && !newPharmacyId) {
         setNewPharmacyId(pharmacyRes.data[0].id)
       }
-    } catch (error) { console.error(error); } 
-    finally { setLoading(false) }
+    } catch (error) { console.error(error); } finally { setLoading(false) }
   }
 
-  // --- ALTA DE EMPLEADO ---
-  const handleCreateOrInvite = async (e) => {
+  const handleMetricChange = (id, f, v) => setEmployees(prev => prev.map(e => e.id === id ? {...e, [f]: v} : e));
+  const handleSaveMetric = async (id, f, v) => { 
+      const { error } = await supabase.from('profiles').update({ [f]: v===''?0:Number(v) }).eq('id', id); 
+      if(error) { alert(error.message); loadData(); } 
+  }
+
+  const handleToggleStatus = async (id, status, name) => { 
+      if(!window.confirm(`¿${status ? 'Dar de baja' : 'Reactivar'} a ${name}?`)) return;
+      await supabase.from('profiles').update({active: !status}).eq('id', id);
+      loadData();
+  }
+
+  const handleCreate = async (e) => {
     e.preventDefault()
     if (!newName || !newRole || !newPharmacyId) { alert('Faltan datos.'); return; }
-
-    const needsAuth = ['admin', 'gestor', 'gerente'].includes(newRole);
-    if (needsAuth && !newEmail) { alert('El email es obligatorio para este rol.'); return; }
-
+    if (hasLogin && (!newEmail || !newPassword)) { alert('Email/Pass requeridos.'); return; }
     setActionLoading(true);
     try {
-        if (needsAuth) {
-            // INVITACIÓN (Tiene login)
-            const { error } = await supabase.functions.invoke('invite-employee', {
-              body: { email: newEmail, full_name: newName, role: newRole, pharmacy_id: parseInt(newPharmacyId) }
+        if (hasLogin) {
+            const { error } = await supabase.functions.invoke('manage-employees', {
+              body: { action: 'create', email: newEmail, password: newPassword, full_name: newName, role: newRole, pharmacy_id: parseInt(newPharmacyId) }
             })
             if (error) throw error;
-            alert(`Invitación enviada a ${newEmail}`);
+            alert(`Usuario creado.`);
         } else {
-            // FICHA LOCAL (Sin login - Modo Quiosco)
             const { error } = await supabase.from('profiles').insert({
-                id: crypto.randomUUID(), // ID Local
-                full_name: newName,
-                role: newRole,
-                pharmacy_id: parseInt(newPharmacyId),
-                counter_hours: 0, 
-                days_worked: 0
+                id: crypto.randomUUID(), full_name: newName, role: newRole, pharmacy_id: parseInt(newPharmacyId),
+                counter_hours: 0, days_worked: 0, active: true
             });
             if (error) throw error;
-            alert('Empleado local creado correctamente.');
+            alert('Empleado local creado.');
         }
-        setNewName(''); setNewEmail(''); loadData();
+        setNewName(''); setNewEmail(''); setNewPassword(''); setHasLogin(false); loadData();
     } catch (error) { alert('Error: ' + error.message); } 
     finally { setActionLoading(false); }
   }
 
-  // --- BORRAR ---
-  const handleDeleteEmployee = async (employeeId, employeeName) => {
-        if (!window.confirm(`¿BORRAR a ${employeeName}?`)) return;
-        setActionLoading(true);
-        try {
-          // 1. Intentar borrar de Auth (si existe)
-          const { error } = await supabase.functions.invoke('delete-employee', { body: { employee_id: employeeId } });
-          
+  const handleUpdateEmployee = async (e) => {
+      e.preventDefault();
+      if (!editingEmployee) return;
+      setActionLoading(true);
+      try {
+          const payload = {
+              action: 'update', userId: editingEmployee.id, full_name: editingEmployee.full_name,
+              pharmacy_id: parseInt(editingEmployee.pharmacy_id)
+          };
+          if (editingEmployee.new_password) payload.password = editingEmployee.new_password;
+          if (editingEmployee.new_email) payload.email = editingEmployee.new_email;
+
+          const { error } = await supabase.functions.invoke('manage-employees', { body: payload });
           if (error) {
-             // Si falla porque no existe en Auth (es local), borramos de la tabla manualmente
-             // Comprobamos si el mensaje de error indica 404 o 'User not found'
-             // (A veces viene en error.message, a veces en error.context)
-             const isNotFound = error.message?.includes("not found") || (error.context && error.context.status === 404);
-
-             if (isNotFound) {
-                 console.warn("Usuario no encontrado en Auth, borrando perfil local...");
-                 const { error: dbError } = await supabase.from('profiles').delete().eq('id', employeeId);
-                 if (dbError) throw dbError;
-                 alert('Empleado local borrado.');
-             } else { throw error; }
-          } else {
-             alert(`Usuario borrado.`);
+             console.warn("Fallback update local...");
+             await supabase.from('profiles').update({
+                 full_name: editingEmployee.full_name, pharmacy_id: editingEmployee.pharmacy_id
+             }).eq('id', editingEmployee.id);
           }
-          loadData();
-        } catch (error) { alert('Error al borrar: ' + error.message); } 
-        finally { setActionLoading(false); }
-   }
+          alert("Actualizado."); setEditingEmployee(null); loadData();
+      } catch(e) { alert(e.message); }
+      finally { setActionLoading(false); }
+  }
 
-   // --- Métrica ---
-   const handleSaveMetric = async (id, field, val) => {
-       const { error } = await supabase.from('profiles').update({ [field]: Number(val) }).eq('id', id);
-       if(error) { alert(error.message); loadData(); }
-   }
-   const handleMetricChange = (id, field, val) => {
-       setEmployees(prev => prev.map(e => e.id === id ? {...e, [field]: val} : e));
-   }
+  const handleResetPassword = async (id, name) => {
+    if (!window.confirm(`Resetear password de ${name}?`)) return;
+    try { await supabase.functions.invoke('reset-employee-password', {body:{employee_id:id}}); alert("Email enviado."); } catch(e){alert(e.message)}
+  }
 
   if (loading) return <p>Cargando...</p>;
-
-  // Determinar si necesita email
-  const roleNeedsEmail = ['admin', 'gestor', 'gerente'].includes(newRole);
+  const visibleEmployees = showInactive ? employees : employees.filter(e => e.active !== false);
+  
+  const isManager = ['admin', 'gestor', 'gerente'].includes(profile.role);
+  const canManageAll = ['admin', 'gestor'].includes(profile.role);
 
   return (
     <div className="employee-manager">
+      {/* Formulario Alta */}
       {(profile.role !== 'empleado') && (
-        <form onSubmit={handleCreateOrInvite} className="service-form">
+        <form onSubmit={handleCreate} className="service-form">
           <h3>Alta de Personal</h3>
           <div className="form-grid">
-            <div><label>Nombre</label><input type="text" value={newName} onChange={e=>setNewName(e.target.value)} required /></div>
-            
+            <div><label>Nombre</label><input type="text" value={newName} onChange={e=>setNewName(e.target.value)} required placeholder="Nombre" /></div>
             <div><label>Rol</label>
-               <select value={newRole} onChange={e=>setNewRole(e.target.value)} disabled={profile.role !== 'admin'}>
+               <select value={newRole} onChange={e=>{
+                   setNewRole(e.target.value);
+                   if(['admin','gestor','gerente'].includes(e.target.value)) setHasLogin(true);
+               }} disabled={!canManageAll}>
                  <option value="empleado">Empleado</option>
-                 {profile.role === 'admin' && <><option value="gerente">Gerente</option><option value="gestor">Gestor</option><option value="admin">Admin</option></>}
-               </select>
-            </div>
-
-            <div><label>Email {roleNeedsEmail?'*':''}</label>
-              <input type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} 
-                     required={roleNeedsEmail} disabled={!roleNeedsEmail} 
-                     placeholder={roleNeedsEmail ? "Requerido para acceso" : "No necesario"} 
-                     style={{backgroundColor: !roleNeedsEmail ? '#f0f0f0' : 'white'}}/>
-            </div>
-
-             <div><label>Farmacia</label>
-               <select value={newPharmacyId} onChange={e=>setNewPharmacyId(e.target.value)} disabled={profile.role !== 'admin'}>
-                 {profile.role !== 'admin' && pharmacies.length ? <option value={pharmacies[0].id}>{pharmacies[0].name}</option> : 
-                    pharmacies.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                 {canManageAll && <><option value="gerente">Gerente</option><option value="gestor">Gestor</option><option value="admin">Admin</option></>}
                </select>
              </div>
-            <button type="submit" className="button" disabled={actionLoading}>{actionLoading ? '...' : 'Guardar'}</button>
+             <div><label>Farmacia</label>
+               <select value={newPharmacyId} onChange={e=>setNewPharmacyId(e.target.value)} disabled={!canManageAll}>
+                 {!canManageAll && pharmacies.length > 0 ? (
+                     <option value={pharmacies[0].id}>{pharmacies[0].name}</option>
+                 ) : canManageAll ? (
+                     <>
+                        {pharmacies.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                     </>
+                 ) : ( <option value="" disabled>-- --</option> )}
+               </select>
+             </div>
+             <div style={{gridColumn: '1 / -1', background:'#f9f9f9', padding:10, borderRadius:8}}>
+                 <label style={{display:'flex',gap:5,cursor:'pointer'}}><input type="checkbox" checked={hasLogin} onChange={e=>setHasLogin(e.target.checked)}/><strong>Con Login</strong></label>
+                 {(hasLogin) && <div style={{display:'flex',gap:15,marginTop:5}}><input type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email" style={{flex:1}}/><input type="text" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Clave" style={{flex:1}}/></div>}
+            </div>
+            <button type="submit" className="button" disabled={actionLoading}>Crear</button>
           </div>
         </form>
       )}
 
       <hr />
-      <h3>Plantilla</h3>
+      <div style={{display:'flex', justifyContent:'space-between', marginBottom:10}}>
+          <h3>Plantilla</h3>
+          <label style={{cursor:'pointer'}}><input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)}/> Ver Bajas</label>
+      </div>
+      
       <table className="service-table">
-        <thead><tr><th>Nombre</th><th>Rol</th>{(profile.role === 'admin' || profile.role === 'gestor') && <th>Farmacia</th>}<th>Horas/Día</th><th>Días/Mes</th><th>Total</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Rol</th>{(profile.role!=='gerente')&&<th>Farmacia</th>}<th>Horas</th><th>Días</th><th>Total</th><th>Acciones</th></tr></thead>
         <tbody>
-          {employees.map((emp) => (
-              <tr key={emp.id}>
-                <td>{emp.full_name}</td><td>{emp.role}</td>
-                {(profile.role === 'admin' || profile.role === 'gestor') && <td>{emp.pharmacies?.name}</td>}
-                <td><input type="number" className="assignment-input" value={emp.counter_hours||''} onChange={e=>handleMetricChange(emp.id, 'counter_hours', e.target.value)} onBlur={e=>handleSaveMetric(emp.id, 'counter_hours', e.target.value)}/></td>
-                <td><input type="number" className="assignment-input" value={emp.days_worked||''} onChange={e=>handleMetricChange(emp.id, 'days_worked', e.target.value)} onBlur={e=>handleSaveMetric(emp.id, 'days_worked', e.target.value)}/></td>
-                <td>{(emp.counter_hours||0)*(emp.days_worked||0)}h</td>
-                <td className="actions-cell">
-                    {(profile.role === 'admin' && emp.id !== profile.id) || (profile.role === 'gerente' && emp.role === 'empleado') ? 
-                       <button className="button-delete" onClick={()=>handleDeleteEmployee(emp.id, emp.full_name)} disabled={actionLoading}>Borrar</button> : null}
-                </td>
-              </tr>
+          {visibleEmployees.map((emp) => (
+            <tr key={emp.id} style={emp.active===false?{background:'#ffebee'}:{}}>
+              <td>{emp.full_name}</td>
+              <td>
+                  {emp.role}
+                  {emp.active===false && <span style={{color:'red', fontWeight:'bold', marginLeft:5}}>(BAJA)</span>}
+              </td>
+              {(profile.role!=='gerente') && <td>{emp.pharmacies?.name}</td>}
+              <td><input type="number" className="assignment-input" value={emp.counter_hours||''} onChange={e=>handleMetricChange(emp.id, 'counter_hours', e.target.value)} onBlur={e=>handleSaveMetric(emp.id, 'counter_hours', e.target.value)} disabled={emp.active===false}/></td>
+              <td><input type="number" className="assignment-input" value={emp.days_worked||''} onChange={e=>handleMetricChange(emp.id, 'days_worked', e.target.value)} onBlur={e=>handleSaveMetric(emp.id, 'days_worked', e.target.value)} disabled={emp.active===false}/></td>
+              <td>{(emp.counter_hours||0)*(emp.days_worked||0)}h</td>
+              <td className="actions-cell">
+                {(isManager && emp.active!==false) && 
+                    <button className="button-secondary" onClick={() => setEditingEmployee({...emp, new_password: '', new_email: ''})}>Editar</button>
+                }
+                {(isManager && emp.active!==false && ['admin','gestor','gerente'].includes(emp.role)) && 
+                    <button className="button-secondary" onClick={()=>handleResetPassword(emp.id, emp.full_name)}>Reset</button>
+                }
+                {(isManager && emp.id!==profile.id) && 
+                    <button className={emp.active!==false?"button-delete":"button"} onClick={()=>handleToggleStatus(emp.id, emp.active!==false, emp.full_name)}>{emp.active!==false?'Baja':'Alta'}</button>
+                }
+                {/* --- EL BOTÓN DE BORRAR FÍSICO HA SIDO ELIMINADO AQUÍ --- */}
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
+
+      {editingEmployee && (
+        <div className="modal-backdrop" onClick={()=>setEditingEmployee(null)}>
+          <div className="modal-content" onClick={e=>e.stopPropagation()}>
+            <h3>Editar: {editingEmployee.full_name}</h3>
+            <form onSubmit={handleUpdateEmployee}>
+                <div className="form-group"><label>Nombre</label><input type="text" value={editingEmployee.full_name} onChange={e=>setEditingEmployee({...editingEmployee, full_name:e.target.value})} required/></div>
+                {canManageAll && (
+                    <div className="form-group"><label>Farmacia</label><select value={editingEmployee.pharmacy_id||''} onChange={e=>setEditingEmployee({...editingEmployee, pharmacy_id:e.target.value})}>{pharmacies.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                )}
+                <div className="form-group" style={{marginTop:15, borderTop:'1px dashed #ccc', paddingTop:10}}>
+                    <label style={{color:'#d35400'}}>Cambiar Credenciales (Opcional)</label>
+                    <input type="email" placeholder="Nuevo Email" value={editingEmployee.new_email || ''} onChange={e=>setEditingEmployee({...editingEmployee, new_email:e.target.value})} style={{marginBottom:5}}/>
+                    <input type="text" placeholder="Nueva Contraseña" value={editingEmployee.new_password} onChange={e=>setEditingEmployee({...editingEmployee, new_password:e.target.value})}/>
+                </div>
+                <div className="modal-actions">
+                    <button type="button" className="button-secondary" onClick={()=>setEditingEmployee(null)}>Cancelar</button>
+                    <button type="submit" className="button" disabled={actionLoading}>Guardar</button>
+                </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -17,8 +17,14 @@ export default function EmployeeAssignmentManager({ profile }) {
     setLoading(true)
     let pharmacyId = profile.pharmacy_id
     
-    // Cargar empleados, servicios y objetivos de la farmacia
-    let empQuery = supabase.from('profiles').select('*').eq('role', 'empleado')
+    // --- CORRECCIÓN AQUÍ: Filtrar inactivos ---
+    // Solo traemos empleados cuyo campo 'active' no sea false (para incluir true y null)
+    let empQuery = supabase.from('profiles')
+        .select('*')
+        .eq('role', 'empleado')
+        .neq('active', false) // <-- FILTRO DE INACTIVOS
+    // ------------------------------------------
+
     let servQuery = supabase.from('services').select('*')
     let objQuery = supabase.from('objectives').select('*')
     let assignQuery = supabase.from('employee_assignments').select('*')
@@ -28,9 +34,8 @@ export default function EmployeeAssignmentManager({ profile }) {
         empQuery = empQuery.eq('pharmacy_id', pharmacyId)
         servQuery = servQuery.eq('pharmacy_id', pharmacyId)
         objQuery = objQuery.eq('pharmacy_id', pharmacyId)
-        // assignQuery se filtra indirectamente por RLS
       } else if (profile.role === 'gestor') {
-        console.warn("Gestor: Carga multi-farmacia pendiente para asignaciones.")
+        console.warn("Gestor: Carga multi-farmacia pendiente.")
       } else { 
         return setLoading(false) 
       }
@@ -44,11 +49,10 @@ export default function EmployeeAssignmentManager({ profile }) {
         if (empRes.data) setEmployees(empRes.data)
         if (servRes.data) setServices(servRes.data)
         if (objRes.data) setObjectives(objRes.data)
-        
+
         if (assignRes.data) {
             const initialAssignments = {}
             assignRes.data.forEach(a => {
-                // Guardamos estructura compuesta: { total: X, new: Y }
                 initialAssignments[`${a.employee_id}-${a.service_id}`] = {
                     total: a.assigned_services_count || 0,
                     new: a.target_new_clients || 0
@@ -70,62 +74,51 @@ export default function EmployeeAssignmentManager({ profile }) {
       const updates = [];
       const newAssignmentsState = { ...assignments };
 
-      // 1. Calcular la "Fuerza de Trabajo Total" de la farmacia (Suma de coeficientes)
-      // Coeficiente = Horas diarias * Días al mes
+      // Calcular fuerza total (Solo de los empleados activos cargados)
       const totalWorkForce = employees.reduce((sum, emp) => sum + ((emp.counter_hours || 0) * (emp.days_worked || 0)), 0);
 
       if (totalWorkForce === 0) {
-          alert("No hay horas/días definidos para los empleados. Configúralo en 'Gestión de Empleados' primero.");
+          alert("No hay horas/días definidos para los empleados activos. Configúralo en 'Gestión de Empleados' primero.");
           return;
       }
 
-      // 2. Para cada servicio...
+      // Para cada servicio...
       services.forEach(service => {
-          // Obtener el objetivo global de la farmacia para este servicio (definido en el paso anterior)
           const objective = objectives.find(o => o.service_id === service.id);
           const totalTarget = objective?.target_appointments || 0;
-          
-          // Obtener el % de nuevos deseado para este servicio (configurado en ServiceManager)
           const pctNew = service.target_new_clients_pct || 0;
 
-          // 3. Repartir entre empleados según su peso en la fuerza de trabajo
+          // Repartir entre empleados activos
           employees.forEach(emp => {
               const empWorkForce = (emp.counter_hours || 0) * (emp.days_worked || 0);
-              const share = empWorkForce / totalWorkForce; // % de participación del empleado (ej. 0.33 para 33%)
+              const share = empWorkForce / totalWorkForce; 
 
-              // Objetivo Individual Total (Redondeado)
-              // Ej: Si el objetivo global es 100 y mi share es 0.33, mi objetivo es 33.
               const empTotalTarget = Math.round(totalTarget * share);
-              
-              // Objetivo Individual Nuevos (% sobre el total asignado al empleado)
-              // Ej: Si mi objetivo total es 33 y el % de nuevos del servicio es 20%, mi objetivo de nuevos es 7.
               const empNewTarget = Math.round(empTotalTarget * (pctNew / 100));
 
-              // Preparar actualización para la BD
               updates.push({
                   employee_id: emp.id,
                   service_id: service.id,
                   assigned_services_count: empTotalTarget,
-                  target_new_clients: empNewTarget // Guardamos también el objetivo de nuevos
+                  target_new_clients: empNewTarget
               });
               
-              // Actualizar estado local para feedback inmediato en la tabla
               newAssignmentsState[`${emp.id}-${service.id}`] = { total: empTotalTarget, new: empNewTarget };
           });
       });
 
-      // 4. Guardar en bloque (Upsert masivo)
+      // Guardar
       const { error } = await supabase.from('employee_assignments').upsert(updates, { onConflict: 'employee_id, service_id' });
 
       if (error) alert("Error al distribuir: " + error.message);
       else {
           setAssignments(newAssignmentsState);
-          alert("¡Objetivos redistribuidos correctamente en base a la carga de trabajo!");
+          alert("¡Objetivos redistribuidos correctamente!");
       }
   }
 
   if (loading) return <p>Cargando asignaciones...</p>
-  if (profile.role === 'empleado') return null // Los empleados no ven esto
+  if (profile.role === 'empleado') return null
 
   return (
     <div className="assignment-manager">
@@ -148,7 +141,6 @@ export default function EmployeeAssignmentManager({ profile }) {
         </thead>
         <tbody>
           {employees.map(emp => {
-             // Calcula el porcentaje de fuerza laboral para mostrarlo como referencia visual
              const empWorkForce = (emp.counter_hours||0)*(emp.days_worked||0);
              const totalWorkForce = employees.reduce((s,e)=>s+((e.counter_hours||0)*(e.days_worked||0)),0);
              const sharePct = totalWorkForce > 0 ? (empWorkForce / totalWorkForce * 100).toFixed(1) : 0;
@@ -157,15 +149,12 @@ export default function EmployeeAssignmentManager({ profile }) {
                 <tr key={emp.id}>
                   <td>
                       {emp.full_name} <br/>
-                      <small style={{color:'#666'}}>
-                          Coef: {sharePct}%
-                      </small>
+                      <small style={{color:'#666'}}>Coef: {sharePct}%</small>
                   </td>
                   {services.map(s => {
                     const val = assignments[`${emp.id}-${s.id}`] || { total: 0, new: 0 };
                     return (
                       <td key={s.id} style={{textAlign:'center'}}>
-                        {/* Mostramos el resultado del cálculo (o 0) */}
                         <strong>{val.total}</strong> / <span style={{color:'green', fontWeight:'bold'}}>{val.new}</span>
                       </td>
                     )

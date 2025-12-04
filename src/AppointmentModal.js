@@ -4,7 +4,8 @@ import { supabase } from './supabaseClient'
 export default function AppointmentModal({
   profile, services, onClose, mode, date, onSave,
   existingAppointment, onUpdate, onDelete,
-  selectedPharmacyId // <-- RECIBE LA FARMACIA DESDE EL CALENDARIO
+  selectedPharmacyId,
+  preSelectedServiceId // <-- ¡NUEVO PROP!
 }) {
 
   // --- Helper Functions ---
@@ -24,16 +25,22 @@ export default function AppointmentModal({
   };
   const getServiceName = (id) => Array.isArray(services) ? services.find(s => s.id?.toString() === id?.toString())?.name || "N/A" : "N/A";
 
-  // Filtramos servicios por la farmacia seleccionada en el calendario
   const filteredServices = selectedPharmacyId 
      ? services.filter(s => s.pharmacy_id?.toString() === selectedPharmacyId?.toString())
      : services;
 
+  // --- Estados del Modal ---
   const [serviceId, setServiceId] = useState(() => {
     if (mode === 'edit' && existingAppointment?.service_id) return existingAppointment.service_id;
+    
+    // ¡CAMBIO! Si hay un servicio pre-seleccionado (clic en horario), úsalo
+    if (mode === 'create' && preSelectedServiceId) return preSelectedServiceId;
+
+    // Si no, selecciona el primero de la lista
     if (mode === 'create' && filteredServices.length > 0) return filteredServices[0].id;
     return '';
   });
+
   const [clientName, setClientName] = useState(existingAppointment?.client_name || '');
   const [clientPhone, setClientPhone] = useState(existingAppointment?.client_phone || '');
   const [tarjetaTrebol, setTarjetaTrebol] = useState(existingAppointment?.tarjeta_trebol || '');
@@ -55,11 +62,13 @@ export default function AppointmentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, date, existingAppointment, serviceId]);
 
+  // Sincronizar props
   useEffect(() => {
       if (mode === 'edit' && existingAppointment) {
           setClientName(existingAppointment.client_name || ''); setClientPhone(existingAppointment.client_phone || ''); setTarjetaTrebol(existingAppointment.tarjeta_trebol || ''); setObservations(existingAppointment.observations || ''); setReminderSent(existingAppointment.reminder_sent || false); setAttended(existingAppointment.attended || false); setAmount(existingAppointment.amount ?? ''); setIsNewClient(existingAppointment.is_new_client || false);
       }
   }, [existingAppointment, mode]);
+  
   useEffect(() => { if (parseFloat(amount) > 0) setAttended(true); }, [amount]);
 
   async function loadAvailableSlots(dateForSlots, serviceIdToLoad) {
@@ -106,12 +115,11 @@ export default function AppointmentModal({
     const numericAmount = amount === '' ? null : parseFloat(amount);
     const timeToSave = selectedTime;
     
-    // La farmacia ya viene decidida desde el Calendario
     const pharmacyIdToSave = mode === 'create' ? selectedPharmacyId : existingAppointment.pharmacy_id;
 
     const formData = {
       clientName, clientPhone, tarjetaTrebol, time: timeToSave, serviceId,
-      pharmacyId: pharmacyIdToSave, // Usamos la pasada por prop
+      pharmacyId: pharmacyIdToSave,
       reminderSent, attended, amount: numericAmount, isReserve: isReserve,
       isNewClient: isNewClient, observations: observations
     };
@@ -124,7 +132,7 @@ export default function AppointmentModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
          <h2>{mode === 'create' ? 'Nueva Cita' : 'Editar Cita'}</h2>
-         {mode === 'create' && <p>Creando cita: <strong>{date}</strong></p>}
+         {mode === 'create' && <p>Creando cita para: <strong>{date}</strong></p>}
          {mode === 'edit' && <p>Cita: <strong>{getServiceName(serviceId)}</strong> el <strong>{existingAppointment?.appointment_time ? new Date(existingAppointment.appointment_time).toLocaleDateString('es-ES') : ''}</strong></p>}
 
          <form onSubmit={handleSubmit}>

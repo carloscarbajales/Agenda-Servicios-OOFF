@@ -3,9 +3,9 @@ import { supabase } from './supabaseClient'
 
 // Días de la semana
 const weekDays = [
- { name: 'Domingo', id: 0 }, { name: 'Lunes', id: 1 }, { name: 'Martes', id: 2 },
+ { name: 'Lunes', id: 1 }, { name: 'Martes', id: 2 },
  { name: 'Miércoles', id: 3 }, { name: 'Jueves', id: 4 }, { name: 'Viernes', id: 5 },
- { name: 'Sábado', id: 6 },
+ { name: 'Sábado', id: 6 }, { name: 'Domingo', id: 0 }, 
 ];
 
 // Opciones para las semanas del mes
