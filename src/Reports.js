@@ -48,17 +48,16 @@ export default function Reports({ profile }) {
   const [assignments, setAssignments] = useState([])
 
   // --- Filtros ---
-  const [filterServiceId, setFilterServiceId] = useState('all')
+  const [filterPharmacyId, setFilterPharmacyId] = useState('all')
+  const [filterServiceName, setFilterServiceName] = useState('all')
   const [filterEmployeeId, setFilterEmployeeId] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [filterPharmacyId, setFilterPharmacyId] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDate, setFilterDate] = useState('')
   
-  // --- CORRECCIÓN: Estado faltante añadido ---
   const [showInactiveEmployees, setShowInactiveEmployees] = useState(false)
 
-  // Fechas (Por defecto: mes actual)
+  // Fechas (Rango Global)
   const [startDate, setStartDate] = useState(() => {
       const date = new Date(); return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
   });
@@ -80,7 +79,7 @@ export default function Reports({ profile }) {
       processAndFilterData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, allAppointments, objectives, services, employees, assignments, filterServiceId, filterEmployeeId, filterStatus, filterPharmacyId, searchTerm, startDate, endDate])
+  }, [loading, allAppointments, objectives, services, employees, assignments, filterServiceName, filterEmployeeId, filterStatus, filterPharmacyId, searchTerm, startDate, endDate, filterDate])
 
   async function loadAllData() {
     setLoading(true)
@@ -89,30 +88,22 @@ export default function Reports({ profile }) {
     // Queries
     let appointmentsQuery = supabase.from('appointments').select('*, services!inner(id, name), pharmacies!inner(id, name), profiles!left(id, full_name)')
     let objectivesQuery = supabase.from('objectives').select('*, services!inner(id, name)')
-    let servicesQuery = supabase.from('services').select('*, pharmacies(name)') // Traer nombre farmacia
+    let servicesQuery = supabase.from('services').select('*, pharmacies(name)')
     let employeesQuery = supabase.from('profiles').select('id, full_name, role, pharmacy_id, active')
     let assignmentsQuery = supabase.from('employee_assignments').select('*')
     let pharmaciesQuery = supabase.from('pharmacies').select('*')
 
-    // Filtros Rol
-    if (profile.role !== 'admin') {
+    // Filtros de Seguridad
+    if (profile.role !== 'admin' && profile.role !== 'gestor') {
+      // Gerente / Empleado
       if (pharmacyId) {
           appointmentsQuery = appointmentsQuery.eq('pharmacy_id', pharmacyId);
           objectivesQuery = objectivesQuery.eq('pharmacy_id', pharmacyId);
           servicesQuery = servicesQuery.eq('pharmacy_id', pharmacyId);
           employeesQuery = employeesQuery.eq('pharmacy_id', pharmacyId);
           pharmaciesQuery = pharmaciesQuery.eq('id', pharmacyId);
-      } else if (profile.role === 'gestor') { /*...*/ }
-      else { /* Empleado */
-         if(profile.pharmacy_id){
-             appointmentsQuery = appointmentsQuery.eq('pharmacy_id', profile.pharmacy_id);
-             objectivesQuery = objectivesQuery.eq('pharmacy_id', profile.pharmacy_id);
-             servicesQuery = servicesQuery.eq('pharmacy_id', profile.pharmacy_id);
-             employeesQuery = employeesQuery.eq('pharmacy_id', profile.pharmacy_id);
-             pharmaciesQuery = pharmaciesQuery.eq('id', profile.pharmacy_id);
-             assignmentsQuery = assignmentsQuery.eq('employee_id', profile.id);
-         } else { return setLoading(false); }
-      }
+          assignmentsQuery = assignmentsQuery.in('employee_id', (await supabase.from('profiles').select('id').eq('pharmacy_id', pharmacyId)).data.map(e=>e.id));
+      } else { return setLoading(false); }
     }
 
     try {
@@ -128,7 +119,7 @@ export default function Reports({ profile }) {
       setEmployees(results[4].data || []);
       setAssignments(results[5].data || []);
 
-      // Configurar filtro por defecto
+      // Filtro por defecto
       if (profile.role !== 'admin' && profile.role !== 'gestor' && profile.pharmacy_id) {
           setFilterPharmacyId(profile.pharmacy_id.toString());
       }
@@ -137,7 +128,7 @@ export default function Reports({ profile }) {
     finally { setLoading(false); }
   }
 
-  // --- Helper para Nombres Únicos de Servicio ---
+  // --- Helper: Nombres Únicos de Servicios ---
   const getUniqueServiceNames = () => {
       let available = services;
       if (filterPharmacyId !== 'all') {
@@ -147,14 +138,14 @@ export default function Reports({ profile }) {
       return [...new Set(names)].sort();
   }
 
-  // --- PROCESAMIENTO CENTRAL ---
+  // --- PROCESAMIENTO ---
   function processAndFilterData() {
     if (!Array.isArray(allAppointments)) return;
 
     const startISO = `${startDate}T00:00:00`;
     const endISO = `${endDate}T23:59:59`;
 
-    // 1. Filtrar UNIVERSO de citas (Por Fecha y Farmacia)
+    // 1. Universo: Citas en rango de fecha y farmacia seleccionada
     const universeAppointments = allAppointments.filter(app => {
         const dateMatch = app.appointment_time >= startISO && app.appointment_time <= endISO;
         const pharmacyMatch = filterPharmacyId === 'all' || app.pharmacy_id?.toString() === filterPharmacyId?.toString();
@@ -166,38 +157,29 @@ export default function Reports({ profile }) {
     filterAppointmentListLogic(universeAppointments);
   }
 
-  // --- CÁLCULO POR SERVICIO (AGRUPADO POR NOMBRE) ---
+  // --- CÁLCULO 1: INFORME POR SERVICIO (AGRUPADO) ---
   function calculateServiceReport(universeApps) {
-       // 1. Identificar nombres únicos de servicios a mostrar
        const uniqueNames = getUniqueServiceNames();
-       // Aplicar filtro de servicio si existe (por nombre)
-       // Aquí usamos filterServiceId para mantener coherencia de nombre de variable, aunque contiene el NOMBRE si usamos el selector nuevo
-       // O mejor, usamos filterServiceId si es 'all', o filtramos por ID si el selector envía ID. 
-       // Pero en el nuevo selector enviaremos NOMBRE. Asumamos que filterServiceId guarda el NOMBRE si viene del selector de nombres.
-       // REVISIÓN: En el JSX de abajo, el selector de servicio usa filterServiceId pero mapea NOMBRES. 
-       // Así que filterServiceId contendrá "Nutrición", no "5".
        
-       const namesToShow = (filterServiceId !== 'all') 
-           ? uniqueNames.filter(name => name === filterServiceId) 
+       const namesToShow = (filterServiceName !== 'all') 
+           ? uniqueNames.filter(name => name === filterServiceName) 
            : uniqueNames;
 
        const rows = namesToShow.map(serviceName => {
-           // IDs de servicios que se llamen así
-           const matchingServiceIds = services
-               .filter(s => s.name === serviceName && (filterPharmacyId === 'all' || s.pharmacy_id.toString() === filterPharmacyId))
-               .map(s => s.id);
+           const matchingServices = services.filter(s => 
+               s.name === serviceName && 
+               (filterPharmacyId === 'all' || s.pharmacy_id.toString() === filterPharmacyId)
+           );
+           const matchingIds = matchingServices.map(s => s.id);
 
-           // Citas
+           const serviceObjs = objectives.filter(o => matchingIds.includes(o.service_id));
+           const target = serviceObjs.reduce((sum, o) => sum + (o.target_appointments || 0), 0);
+
            const serviceApps = universeApps.filter(app => 
-               matchingServiceIds.includes(app.service_id) &&
+               matchingIds.includes(app.service_id) &&
                (filterEmployeeId === 'all' || app.created_by_user_id === filterEmployeeId)
            );
 
-           // Objetivos
-           const serviceObjs = objectives.filter(o => matchingServiceIds.includes(o.service_id));
-           const target = serviceObjs.reduce((sum, o) => sum + (o.target_appointments || 0), 0);
-
-           // Métricas
            const citados = serviceApps.length;
            const confirmados = serviceApps.filter(a => a.status === 'confirmada').length;
            const nuevos = serviceApps.filter(a => a.status === 'confirmada' && a.attended && a.is_new_client).length;
@@ -206,13 +188,11 @@ export default function Reports({ profile }) {
            const factReal = serviceApps.filter(a => a.status === 'confirmada' && a.attended).reduce((acc, curr) => acc + (Number(curr.amount)||0), 0);
            
            let factObj = 0;
-           matchingServiceIds.forEach(id => {
-               const srv = services.find(s => s.id === id);
-               const obj = objectives.find(o => o.service_id === id);
-               if (srv && obj) factObj += (obj.target_appointments || 0) * (srv.estimated_billing || 0);
+           matchingServices.forEach(s => {
+               const obj = objectives.find(o => o.service_id === s.id);
+               if(obj) factObj += (obj.target_appointments || 0) * (s.estimated_billing || 0);
            });
 
-           // Ratios
            const pct_captacion = target > 0 ? (citados/target)*100 : 0;
            const pct_asistencia = citados > 0 ? (asistentes/citados)*100 : 0;
            const tasa_conv = asistentes > 0 ? (compradores/asistentes)*100 : 0;
@@ -220,21 +200,30 @@ export default function Reports({ profile }) {
 
            return {
                serviceName: serviceName, 
-               target, citados, confirmados, nuevos, asistentes, compradores,
-               factReal, factObj, pct_captacion, pct_asistencia, tasa_conv, pct_fact
+               pharmacyName: filterPharmacyId !== 'all' && matchingServices.length > 0 ? matchingServices[0].pharmacies?.name : '',
+               target, citados, confirmados, nuevos, asistentes, compradores, 
+               // CORRECCIÓN: Usamos nombres explícitos que coincidan con el Render
+               facturacion_real: factReal, 
+               facturacion_objetivo: factObj, 
+               pct_captacion, pct_asistencia, 
+               tasa_conversion: tasa_conv, 
+               pct_facturacion: pct_fact
            };
        });
 
-       // Totales Globales
-       const totalTarget = rows.reduce((sum, item) => sum + item.target, 0);
-       const totalAttended = rows.reduce((sum, item) => sum + item.asistentes, 0);
+       // Totales Generales
+       const totalTarget = rows.reduce((sum, i) => sum + i.target, 0);
+       const totalAttended = rows.reduce((sum, i) => sum + i.asistentes, 0);
        const overallPerc = totalTarget > 0 ? ((totalAttended / totalTarget) * 100) : 0;
-       const totalFactReal = rows.reduce((sum, item) => sum + item.factReal, 0);
-       const totalFactObj = rows.reduce((sum, item) => sum + item.factObj, 0);
-       const totalCitados = rows.reduce((sum, item) => sum + item.citados, 0);
-       const totalConfirmados = rows.reduce((sum, item) => sum + item.confirmados, 0);
-       const totalNuevos = rows.reduce((sum, item) => sum + item.nuevos, 0);
-       const totalCompradores = rows.reduce((sum, item) => sum + item.compradores, 0);
+       // CORRECCIÓN: Usamos los nuevos nombres de propiedad para sumar
+       const totalFactReal = rows.reduce((sum, i) => sum + i.facturacion_real, 0);
+       const totalFactObj = rows.reduce((sum, i) => sum + i.facturacion_objetivo, 0);
+       
+       const totalCitados = rows.reduce((sum, i) => sum + i.citados, 0);
+       const totalConfirmados = rows.reduce((sum, i) => sum + i.confirmados, 0);
+       const totalNuevos = rows.reduce((sum, i) => sum + i.nuevos, 0);
+       const totalCompradores = rows.reduce((sum, i) => sum + i.compradores, 0);
+       
        const totalPctFact = totalFactObj > 0 ? (totalFactReal/totalFactObj)*100 : 0;
        const totalPctCapt = totalTarget > 0 ? (totalCitados/totalTarget)*100 : 0;
 
@@ -249,7 +238,7 @@ export default function Reports({ profile }) {
        });
   }
 
-  // --- CÁLCULO POR EMPLEADO ---
+  // --- CÁLCULO 2: INFORME EMPLEADOS ---
   function calculateEmployeeReport(universeApps) {
        let employeesToShow = employees.filter(emp => emp.role === 'empleado');
        if (filterPharmacyId !== 'all') {
@@ -260,35 +249,31 @@ export default function Reports({ profile }) {
        }
 
        const uniqueServiceNames = getUniqueServiceNames();
-       const namesToShow = (filterServiceId !== 'all') 
-           ? uniqueServiceNames.filter(n => n === filterServiceId) 
+       const namesToShow = (filterServiceName !== 'all') 
+           ? uniqueServiceNames.filter(n => n === filterServiceName) 
            : uniqueServiceNames;
 
        const individualData = employeesToShow.map(employee => {
          const serviceDetails = namesToShow.map(serviceName => {
              const serviceInstance = services.find(s => s.name === serviceName && s.pharmacy_id === employee.pharmacy_id);
-             
-             let targetTotal = 0;
-             let targetNew = 0;
-             let realTotal = 0;
-             let realNew = 0;
+             if (!serviceInstance) return null;
 
-             if (serviceInstance) {
-                 const assignment = assignments.find(a => a.employee_id === employee.id && a.service_id === serviceInstance.id);
-                 if (assignment) {
-                     targetTotal = Number(assignment.assigned_services_count) || 0;
-                     targetNew = Number(assignment.target_new_clients) || 0;
-                 }
-                 const myApps = universeApps.filter(app => 
-                     app.created_by_user_id === employee.id && 
-                     app.service_id === serviceInstance.id && 
-                     app.status === 'confirmada' && 
-                     app.attended
-                 );
-                 realTotal = myApps.length;
-                 realNew = myApps.filter(app => app.is_new_client).length;
-             }
-             return { serviceName: serviceName, targetTotal, targetNew, realTotal, realNew };
+             const assignment = assignments.find(a => a.employee_id === employee.id && a.service_id === serviceInstance.id);
+             const targetTotal = Number(assignment?.assigned_services_count) || 0;
+             const targetNew = Number(assignment?.target_new_clients) || 0;
+
+             const myApps = universeApps.filter(app => 
+                 app.created_by_user_id === employee.id && 
+                 app.service_id === serviceInstance.id && 
+                 app.status === 'confirmada' && 
+                 app.attended
+             );
+             const realTotal = myApps.length;
+             const realNew = myApps.filter(app => app.is_new_client).length;
+
+             return {
+                 serviceId: serviceInstance.id, serviceName: serviceName, targetTotal, targetNew, realTotal, realNew
+             };
          }).filter(Boolean);
 
          const totalTarget = serviceDetails.reduce((acc, s) => acc + s.targetTotal, 0);
@@ -296,15 +281,12 @@ export default function Reports({ profile }) {
          const percentage = totalTarget > 0 ? ((totalAttended / totalTarget) * 100) : 0;
 
          return { 
-             employeeId: employee.id, 
-             employeeName: employee.full_name || `ID ${employee.id}`, 
+             employeeId: employee.id, employeeName: employee.full_name || `ID ${employee.id}`, 
              active: employee.active,
              serviceDetails, totalTarget, totalAttended, percentage 
          };
        });
 
-       // Filtramos para mostrar/ocultar bajas AQUI si quisiéramos, o en el render
-       // Para consistencia con la tabla, pasamos todos y filtramos en el map
        setIndividualProgress({ data: individualData, displayedServices: namesToShow });
   }
 
@@ -313,8 +295,7 @@ export default function Reports({ profile }) {
      const term = searchTerm.toLowerCase();
      
      const filtered = universeApps.filter(app => {
-        // Filtro por NOMBRE de servicio
-        const serviceMatch = (filterServiceId === 'all' || app.services?.name === filterServiceId);
+        const serviceMatch = (filterServiceName === 'all' || app.services?.name === filterServiceName);
         const employeeMatch = (filterEmployeeId === 'all' || app.created_by_user_id === filterEmployeeId);
         const statusMatch = (filterStatus === 'all') ||
                             (filterStatus === 'confirmada' && app.status === 'confirmada' && !app.attended) ||
@@ -340,10 +321,14 @@ export default function Reports({ profile }) {
   }
 
   // --- Manejadores ---
-  function handleServiceFilterChange(e) { setFilterServiceId(e.target.value); }
+  function handleServiceFilterChange(e) { setFilterServiceName(e.target.value); }
   function handleEmployeeFilterChange(e) { setFilterEmployeeId(e.target.value); }
   function handleStatusFilterChange(e) { setFilterStatus(e.target.value); }
-  function handlePharmacyFilterChange(e) { setFilterPharmacyId(e.target.value); } 
+  function handlePharmacyFilterChange(e) { 
+      setFilterPharmacyId(e.target.value);
+      setFilterServiceName('all'); 
+      setFilterEmployeeId('all'); 
+  } 
   function handleSearchTermChange(e) { setSearchTerm(e.target.value); }
   function handleDateFilterChange(e) { setFilterDate(e.target.value); }
   function handleDateChange(e, field) { 
@@ -386,8 +371,8 @@ export default function Reports({ profile }) {
           ...d,
           pct_captacion: (Number(d.pct_captacion) || 0).toFixed(1) + '%',
           pct_asistencia: (Number(d.pct_asistencia) || 0).toFixed(1) + '%',
-          tasa_conv: (Number(d.tasa_conv) || 0).toFixed(1) + '%',
-          pct_fact: (Number(d.pct_fact) || 0).toFixed(1) + '%'
+          tasa_conv: (Number(d.tasa_conversion) || 0).toFixed(1) + '%',
+          pct_fact: (Number(d.pct_facturacion) || 0).toFixed(1) + '%'
       }));
       downloadCSV(data, `servicios`);
   }
@@ -395,7 +380,6 @@ export default function Reports({ profile }) {
   const exportEmployeeReport = () => {
       const dataToExport = individualProgress.data.filter(item => showInactiveEmployees || item.active !== false);
       if (!dataToExport.length) return alert("No hay datos.");
-      
       const flatData = [];
       dataToExport.forEach(emp => {
           emp.serviceDetails.forEach(srv => {
@@ -456,11 +440,9 @@ export default function Reports({ profile }) {
                 </select>
             </div>
           )}
-
           <div className="filter-group">
               <label>Servicio:</label>
-              {/* SELECT POR NOMBRE */}
-              <select value={filterServiceId} onChange={handleServiceFilterChange}>
+              <select value={filterServiceName} onChange={handleServiceFilterChange}>
                   <option value="all">Todos</option>
                   {getUniqueServiceNames().map(name => <option key={name} value={name}>{name}</option>)}
               </select>
@@ -479,19 +461,16 @@ export default function Reports({ profile }) {
       <CollapsibleCard title="Resumen del Periodo (Filtrado)" defaultOpen={true}>
         <div className="summary-metrics">
           <div><strong>Obj. Citas:</strong><span>{monthlyProgress.overall.target}</span></div>
-          <div><strong>Citados Reales:</strong><span>{monthlyProgress.overall.citados}</span></div>
-          <div><strong>Confirmados:</strong><span>{monthlyProgress.overall.confirmados}</span></div>
           <div><strong>Atendidas:</strong><span>{monthlyProgress.overall.attended}</span></div>
-          <div><strong>Compradores:</strong><span>{monthlyProgress.overall.compradores}</span></div>
           <div style={{width: '100%'}}>
               <strong>% Cumpl. Citas:</strong> <span className="percentage">{(Number(monthlyProgress.overall.percentage)||0).toFixed(1)}%</span>
               <ProgressBar percentage={monthlyProgress.overall.percentage} />
           </div>
-          <div><strong>Fact. Real:</strong><span>{(Number(monthlyProgress.overall.facturacion_real)||0).toFixed(2)}€</span></div>
+          <div><strong>Facturación:</strong><span>{(Number(monthlyProgress.overall.facturacion_real)||0).toFixed(2)}€</span></div>
         </div>
       </CollapsibleCard>
 
-      {/* --- Detalle Servicio (AGRUPADO POR NOMBRE) --- */}
+      {/* --- Detalle Mensual --- */}
       <CollapsibleCard title="Detalle por Servicio" actionElement={<button className="button button-small" onClick={exportServiceDetail}>Descargar CSV</button>}>
         <div className="table-wrapper">
             <table className="service-table report-table detailed-report">
@@ -516,7 +495,7 @@ export default function Reports({ profile }) {
               <tfoot>
                   <tr>
                       <th>TOTAL</th><th>{monthlyProgress.overall.target}</th><th>{monthlyProgress.overall.citados}</th><th>{monthlyProgress.overall.confirmados}</th><th>{monthlyProgress.overall.nuevos}</th><th>{monthlyProgress.overall.attended}</th><th>{monthlyProgress.overall.compradores}</th>
-                      <th>-</th><th>-</th><th>-</th>
+                      <th>{(Number(monthlyProgress.overall.pct_captacion)||0).toFixed(1)}%</th><th>-</th><th>-</th>
                       <th>{(Number(monthlyProgress.overall.facturacion_objetivo)||0).toFixed(0)}€</th>
                       <th>{(Number(monthlyProgress.overall.facturacion_real)||0).toFixed(0)}€</th>
                       <th>{(Number(monthlyProgress.overall.pct_facturacion)||0).toFixed(1)}%</th>
@@ -526,7 +505,7 @@ export default function Reports({ profile }) {
         </div>
       </CollapsibleCard>
 
-      {/* --- Empleados (Columnas = Nombres Servicios) --- */}
+      {/* --- Cumplimiento Individual --- */}
       <CollapsibleCard title="Cumplimiento por Empleado" actionElement={<button className="button button-small" onClick={exportEmployeeReport}>Descargar CSV</button>}>
         <div style={{marginBottom: '10px', textAlign: 'right'}}>
             <label style={{fontSize:'0.9rem', cursor:'pointer'}}>
@@ -574,12 +553,12 @@ export default function Reports({ profile }) {
         </div>
       </CollapsibleCard>
 
-      {/* --- Listado --- */}
+      {/* --- Lista Principal --- */}
       <CollapsibleCard title="Listado de Citas / Clientes" defaultOpen={true} actionElement={<button className="button button-small" onClick={exportAppointmentList}>Descargar CSV</button>}>
         <div className="report-controls list-filters" style={{borderTop:'none', paddingTop:0}}>
             <div className="filter-group"><label>Estado:</label><select value={filterStatus} onChange={handleStatusFilterChange}><option value="all">Todas</option><option value="confirmada">Confirmadas</option><option value="reserva">Reservas</option><option value="realizada">Realizadas</option></select></div>
             <div className="filter-group"><label>Buscar:</label><input type="search" value={searchTerm} onChange={handleSearchTermChange} placeholder="Cliente, Tel..." /></div>
-            <div className="filter-group"><label>Fecha:</label><input type="date" value={filterDate} onChange={handleDateFilterChange} className="search-input" /></div>
+            <div className="filter-group"><label>Fecha Cita:</label><input type="date" value={filterDate} onChange={handleDateFilterChange} className="search-input" /></div>
         </div>
 
         <div className="table-wrapper">
