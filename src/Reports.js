@@ -425,7 +425,8 @@ export default function Reports({ profile }) {
 
 
       {/* --- Resumen General --- */}
-      <CollapsibleCard title="Resumen del Periodo (Filtrado)" defaultOpen={true}>
+      <CollapsibleCard title="Resumen del Periodo (Filtrado)" 
+      >
         <div className="summary-metrics">
           <div><strong>Obj. Citas:</strong><span>{monthlyProgress.overall.target}</span></div>
           <div><strong>Atendidas:</strong><span>{monthlyProgress.overall.attended}</span></div>
@@ -533,7 +534,7 @@ export default function Reports({ profile }) {
       </CollapsibleCard>
 
       {/* --- Lista Principal --- */}
-      <CollapsibleCard title="Listado de Citas / Clientes" defaultOpen={true} actionElement={<button className="button button-small" onClick={exportAppointmentList}>Descargar CSV</button>}>
+      <CollapsibleCard title="Listado de Citas / Clientes"  actionElement={<button className="button button-small" onClick={exportAppointmentList}>Descargar CSV</button>}>
         <div className="report-controls list-filters" style={{borderTop:'none', paddingTop:0}}>
             <div className="filter-group"><label>Estado:</label><select value={filterStatus} onChange={handleStatusFilterChange}><option value="all">Todas</option><option value="confirmada">Confirmadas</option><option value="reserva">Reservas</option><option value="realizada">Realizadas</option></select></div>
             <div className="filter-group"><label>Buscar:</label><input type="search" value={searchTerm} onChange={handleSearchTermChange} placeholder="Cliente, Tel..." /></div>

@@ -53,7 +53,7 @@ export default function Settings({ profile }) {
         </CollapsibleCard>
 
         {/* --- GESTIÓN HORARIOS --- */}
-        <CollapsibleCard title="Gestión de Horarios" defaultOpen={true}>
+        <CollapsibleCard title="Gestión de Horarios" >
           <ScheduleManager profile={profile} />
         </CollapsibleCard>
 
