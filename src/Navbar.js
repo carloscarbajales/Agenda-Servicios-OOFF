@@ -19,7 +19,7 @@ export default function Navbar({
       <div className="navbar-left">
         <a href="#calendar" className="navbar-brand-link" onClick={() => onNavigate('calendar')}>
           <img src={logoTrebol} alt="Logo" className="navbar-logo" />
-          <span className="navbar-brand-text">Farmacias Trébol</span>
+          <span className="navbar-brand-text">Agenda de Servicios</span>
         </a>
         
         <a href="#calendar" className={currentView === 'calendar' ? 'nav-link active' : 'nav-link'} onClick={() => onNavigate('calendar')}>Calendario</a>
