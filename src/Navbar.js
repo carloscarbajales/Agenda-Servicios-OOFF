@@ -14,6 +14,10 @@ export default function Navbar({
   // Encontramos el nombre del empleado activo para mostrarlo
   const activeName = employees.find(e => e.id === activeEmployeeId)?.full_name || profile.full_name;
 
+  // Filtramos empleados para el selector (excluyendo inactivos y el propio usuario logueado si se duplica)
+  // Nota: Si 'active' es undefined (no cargado), asumimos true para no ocultar a nadie por error.
+  const visibleEmployees = employees.filter(e => e.id !== profile.id && e.active !== false);
+
   return (
     <nav className="navbar">
       <div className="navbar-left">
@@ -23,6 +27,11 @@ export default function Navbar({
         </a>
         
         <a href="#calendar" className={currentView === 'calendar' ? 'nav-link active' : 'nav-link'} onClick={() => onNavigate('calendar')}>Calendario</a>
+
+        {/* --- NUEVO ENLACE: Agenda Diaria --- */}
+        <a href="#agenda-table" className={currentView === 'agenda-table' ? 'nav-link active' : 'nav-link'} onClick={() => onNavigate('agenda-table')}>
+          Agenda por Servicio
+        </a>
 
         {(profile.role === 'admin' || profile.role === 'gestor' || profile.role === 'gerente') && (
           <a href="#settings" className={currentView === 'settings' ? 'nav-link active' : 'nav-link'} onClick={() => onNavigate('settings')}>Configuración</a>
@@ -45,7 +54,7 @@ export default function Navbar({
               style={{ padding: '6px 10px', borderRadius: '20px', border: '2px solid #2e7d32', backgroundColor: '#f1f8f3', fontWeight: 'bold', color: '#2e7d32', cursor: 'pointer' }}
             >
               <option value={profile.id}>Usuario Logueado ({profile.full_name})</option>
-              {employees.filter(e => e.id !== profile.id).map(emp => (
+              {visibleEmployees.map(emp => (
                 <option key={emp.id} value={emp.id}>{emp.full_name}</option>
               ))}
             </select>
@@ -56,7 +65,7 @@ export default function Navbar({
            {activeName} ({profile.role})
         </span>
 
-        {/* --- NUEVO: Botón Mi Clave --- */}
+        {/* Botón Mi Clave */}
         <button 
            className="button-secondary" 
            onClick={() => onNavigate('profile')} 
@@ -64,7 +73,6 @@ export default function Navbar({
         >
            Mi Clave
         </button>
-        {/* ---------------------------- */}
         
         <button className="button-secondary" onClick={onLogout}>
           Salir

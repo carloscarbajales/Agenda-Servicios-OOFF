@@ -7,7 +7,8 @@ import Settings from './Settings'
 import Reports from './Reports'
 import Manual from './Manual'
 import Navbar from './Navbar'
-import ChangePassword from './ChangePassword' // <-- 1. IMPORTAR
+import ChangePassword from './ChangePassword' 
+import AgendaTable from './AgendaTable' 
 import './App.css'
 
 function App() {
@@ -38,9 +39,7 @@ function App() {
         
         if (profileData && mounted) {
           setProfile(profileData)
-          // Por defecto, el usuario activo es el que hizo login
           setActiveEmployeeId(profileData.id)
-          // Si tiene farmacia, cargamos compañeros
           if (profileData.pharmacy_id) {
               loadEmployees(profileData.pharmacy_id);
           }
@@ -56,6 +55,7 @@ function App() {
         if (_event === 'PASSWORD_RECOVERY') setAuthEvent('PASSWORD_RECOVERY')
         
         setSession(session)
+        
         if (!session) {
             setProfile(null)
             setPharmacyEmployees([])
@@ -64,7 +64,6 @@ function App() {
             return;
         }
         
-        // Si hay sesión, recargamos perfil por seguridad
         supabase.from('profiles').select('*').eq('id', session.user.id).single()
         .then(({ data }) => {
             if (data) {
@@ -84,23 +83,23 @@ function App() {
   }, [])
 
   async function loadEmployees(pharmacyId) {
-      // Cargamos empleados para el selector del modo quiosco
+      // --- CORRECCIÓN AQUÍ: Incluir 'active' en la consulta ---
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, role')
+        .select('id, full_name, role, active') // <--- AÑADIDO 'active'
         .eq('pharmacy_id', pharmacyId)
-        .in('role', ['empleado', 'gerente']) // Solo personal operativo
+        .in('role', ['empleado', 'gerente']) 
         .order('full_name');
       
       if (data) setPharmacyEmployees(data);
   }
 
-  // Función de Logout segura
   const handleLogout = async () => {
       await supabase.auth.signOut();
       setSession(null);
       setProfile(null);
-      setView('calendar'); // Resetear vista
+      setPharmacyEmployees([]);
+      setView('calendar'); 
   };
 
 
@@ -114,18 +113,17 @@ function App() {
           profile={profile} 
           currentView={view} 
           onNavigate={setView}
-          onLogout={handleLogout} // Pasamos la función explícita
-          // Props Modo Quiosco
+          onLogout={handleLogout} 
           employees={pharmacyEmployees}
           activeEmployeeId={activeEmployeeId}
           onSelectEmployee={setActiveEmployeeId}
         />
         <main className="main-content">
-          {view === 'calendar' && <Calendar key={view} profile={profile} activeEmployeeId={activeEmployeeId} />}
-          {view === 'settings' && <Settings key={view} profile={profile} />}
-          {view === 'reports' && <Reports key={view} profile={profile} />}
+          {view === 'calendar' && <Calendar key="view-calendar" profile={profile} activeEmployeeId={activeEmployeeId} />}
+          {view === 'agenda-table' && <AgendaTable key="view-agenda" profile={profile} activeEmployeeId={activeEmployeeId} />}
+          {view === 'settings' && <Settings key="view-settings" profile={profile} />}
+          {view === 'reports' && <Reports key="view-reports" profile={profile} />}
           {view === 'manual' && <Manual profile={profile} />}
-          {/* --- NUEVO: Renderizar ChangePassword --- */}
           {view === 'profile' && <ChangePassword />}
         </main>
       </div>
