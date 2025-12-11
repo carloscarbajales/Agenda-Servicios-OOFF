@@ -1,16 +1,16 @@
 {
   "files": {
     "main.css": "/Agenda-Servicios-OOFF/static/css/main.4d976d25.css",
-    "main.js": "/Agenda-Servicios-OOFF/static/js/main.fb48225c.js",
+    "main.js": "/Agenda-Servicios-OOFF/static/js/main.d6552b0b.js",
     "static/js/453.a201ca9a.chunk.js": "/Agenda-Servicios-OOFF/static/js/453.a201ca9a.chunk.js",
     "static/media/logo.png": "/Agenda-Servicios-OOFF/static/media/logo.54b27a8a59d8a3209fbd.png",
     "index.html": "/Agenda-Servicios-OOFF/index.html",
     "main.4d976d25.css.map": "/Agenda-Servicios-OOFF/static/css/main.4d976d25.css.map",
-    "main.fb48225c.js.map": "/Agenda-Servicios-OOFF/static/js/main.fb48225c.js.map",
+    "main.d6552b0b.js.map": "/Agenda-Servicios-OOFF/static/js/main.d6552b0b.js.map",
     "453.a201ca9a.chunk.js.map": "/Agenda-Servicios-OOFF/static/js/453.a201ca9a.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.4d976d25.css",
-    "static/js/main.fb48225c.js"
+    "static/js/main.d6552b0b.js"
   ]
 }
