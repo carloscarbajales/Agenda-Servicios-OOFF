@@ -5,31 +5,22 @@ import AppointmentModal from './AppointmentModal'
 // --- Helpers ---
 const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '';
 
-// Helper para calcular días disponibles basado en la recurrencia
 const expandMonthlyRecurrence = (schedule, targetMonth, targetYear) => {
     const events = [];
     const targetWeek = schedule.week_number;
     const targetDay = schedule.day_of_week;
-    
-    // Calcular solo para el mes seleccionado
     const d = new Date(targetYear, targetMonth, 1);
-    
     while (d.getMonth() === targetMonth) {
         if (d.getDay() === targetDay) {
             let isMatch = false;
-            // Verificar semana si aplica
             if (!targetWeek) {
                 isMatch = true;
             } else {
                 const day = d.getDate();
                 const weekNum = Math.ceil(day / 7);
-                if (weekNum === targetWeek) {
-                    isMatch = true;
-                }
+                if (weekNum === targetWeek) isMatch = true;
             }
-
             if (isMatch) {
-                // Construimos fecha local YYYY-MM-DD
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const dayStr = String(d.getDate()).padStart(2, '0');
@@ -52,13 +43,13 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
   // Filtros
   const [filterPharmacyId, setFilterPharmacyId] = useState('');
   const [filterServiceId, setFilterServiceId] = useState('');
-  const [filterMonth, setFilterMonth] = useState(new Date().getMonth()); // 0-11
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth());
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-  const [filterDate, setFilterDate] = useState(''); // Fecha específica seleccionada
+  const [filterDate, setFilterDate] = useState('');
 
   // Datos de la Tabla
-  const [daySlots, setDaySlots] = useState([]); // Los huecos generados
-  const [dayAppointments, setDayAppointments] = useState([]); // Las citas reales
+  const [daySlots, setDaySlots] = useState([]); 
+  const [dayAppointments, setDayAppointments] = useState([]); 
   
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,68 +58,47 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   useEffect(() => { loadMasterData() }, [profile]);
-
-  // Si cambia la farmacia, reseteamos servicio
   useEffect(() => { setFilterServiceId(''); setFilterDate(''); }, [filterPharmacyId]);
-  
-  // Si cambia servicio o mes, recalculamos fechas disponibles (limpiamos selección)
   useEffect(() => { setFilterDate(''); }, [filterServiceId, filterMonth, filterYear]);
-
-  // Si cambia la fecha concreta, cargamos la agenda
-  useEffect(() => {
-      if (filterDate && filterServiceId) loadAgendaForDay();
-  }, [filterDate, filterServiceId]);
+  useEffect(() => { if (filterDate && filterServiceId) loadAgendaForDay(); }, [filterDate, filterServiceId]);
 
   async function loadMasterData() {
       setLoading(true);
-      // 1. Cargar Farmacias (si aplica)
       if (['admin','gestor'].includes(profile.role)) {
           const { data } = await supabase.from('pharmacies').select('*');
           setPharmacies(data || []);
       } else {
           setFilterPharmacyId(profile.pharmacy_id?.toString());
       }
-
-      // 2. Cargar Servicios (y sus horarios para calcular fechas)
       let servQuery = supabase.from('services').select('*, service_schedule(*)');
       if (profile.role !== 'admin' && profile.role !== 'gestor') {
           servQuery = servQuery.eq('pharmacy_id', profile.pharmacy_id);
       }
       const { data: servData } = await servQuery;
       setServices(servData || []);
-      
       setLoading(false);
   }
 
-  // --- Calcular Fechas Disponibles para el Selector ---
   const getAvailableDates = () => {
       if (!filterServiceId) return [];
       const service = services.find(s => s.id.toString() === filterServiceId);
       if (!service || !service.service_schedule) return [];
-
       let dates = [];
       service.service_schedule.forEach(sch => {
           if (sch.is_recurrent) {
-              const recurringDates = expandMonthlyRecurrence(sch, parseInt(filterMonth), parseInt(filterYear));
-              dates = [...dates, ...recurringDates];
+              dates = [...dates, ...expandMonthlyRecurrence(sch, parseInt(filterMonth), parseInt(filterYear))];
           } else {
-              // Puntual: verificar si cae en el mes/año seleccionado
               const d = new Date(sch.specific_date);
               if (d.getMonth() === parseInt(filterMonth) && d.getFullYear() === parseInt(filterYear)) {
-                  // Usamos la fecha tal cual viene de la BD (YYYY-MM-DD)
                   dates.push(sch.specific_date);
               }
           }
       });
-      // Ordenar y únicos
       return [...new Set(dates)].sort();
   };
 
-  // --- Cargar Agenda (Huecos + Citas) ---
   async function loadAgendaForDay() {
       setLoading(true);
-      
-      // 1. Obtener los huecos teóricos (RPC)
       const { data: slots, error: rpcError } = await supabase.rpc('fn_get_all_slots_status', {
           p_service_id: parseInt(filterServiceId),
           p_date: filterDate,
@@ -136,7 +106,6 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
           p_exclude_appointment_id: null 
       });
       
-      // 2. Obtener las citas reales con datos de cliente
       const { data: apps, error: appError } = await supabase
           .from('appointments')
           .select('*, profiles(full_name)') 
@@ -144,17 +113,33 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
           .gte('appointment_time', `${filterDate}T00:00:00`)
           .lte('appointment_time', `${filterDate}T23:59:59`);
 
-      if (rpcError) {
-          console.error("Error RPC:", rpcError);
-          alert(`Error al generar huecos: ${rpcError.message}`);
-      } else if (appError) {
-          console.error("Error Citas:", appError);
-          alert(`Error al cargar citas: ${appError.message}`);
-      } else {
+      if (rpcError) alert(`Error al generar huecos: ${rpcError.message}`);
+      else if (appError) alert(`Error al cargar citas: ${appError.message}`);
+      else {
           setDaySlots(slots || []);
           setDayAppointments(apps || []);
       }
       setLoading(false);
+  }
+
+  // --- Handlers de Actualización Directa (Inline) ---
+  const handleUpdateField = async (id, update) => {
+      const { error } = await supabase.from('appointments').update(update).eq('id', id);
+      if (error) alert(`Error: ${error.message}`);
+      else loadAgendaForDay();
+  }
+
+  const handleAmountInputChange = (id, val) => {
+      setDayAppointments(prev => prev.map(app => app.id === id ? { ...app, amount_display: val } : app));
+  }
+
+  const handleSaveAmount = async (id) => {
+      const app = dayAppointments.find(a => a.id === id);
+      if (!app) return;
+      const val = app.amount_display ?? app.amount;
+      const num = val === '' || val === null ? null : parseFloat(val);
+      const attended = num !== null && num > 0 ? true : (app.attended || false);
+      handleUpdateField(id, { amount: num, attended });
   }
 
   // --- Handlers Modal ---
@@ -166,37 +151,43 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
       } else {
           setModalMode('create');
           setSelectedAppointment(null);
-          setSelectedSlotTime(slotTime); // Pasamos la hora del hueco
+          setSelectedSlotTime(slotTime); 
       }
+      setIsModalOpen(true);
+  }
+
+  // --- NUEVO: Handler para Añadir Reserva Manual ---
+  const handleAddReservation = () => {
+      setModalMode('create');
+      // Pre-configuramos la cita como reserva
+      setSelectedAppointment({
+          status: 'reserva',
+          // Usamos 09:00 como hora por defecto para que no falle la validación,
+          // aunque al ser reserva no ocupa hueco real en la lógica de visualización de slots.
+          appointment_time: `${filterDate}T09:00:00`,
+          pharmacy_id: parseInt(filterPharmacyId), 
+          service_id: parseInt(filterServiceId)
+      });
+      setSelectedSlotTime("09:00"); 
       setIsModalOpen(true);
   }
 
   const handleCloseModal = () => { setIsModalOpen(false); };
   
-  // Reutilizamos lógica de guardado
   const handleSave = async (formData) => {
      const appointmentTime = new Date(`${filterDate}T${formData.time}`).toISOString();
      const creatorId = activeEmployeeId || profile.id;
      
-     // --- CORRECCIÓN: Validar IDs numéricos antes de guardar ---
      const finalPharmacyId = filterPharmacyId 
         ? parseInt(filterPharmacyId, 10) 
         : (profile.pharmacy_id || formData.pharmacyId);
+     const finalServiceId = filterServiceId ? parseInt(filterServiceId, 10) : formData.serviceId;
 
-     const finalServiceId = filterServiceId 
-        ? parseInt(filterServiceId, 10) 
-        : formData.serviceId;
-
-     if (!finalPharmacyId) {
-         alert("Error: No se ha identificado la farmacia. Por favor selecciona una en el filtro.");
-         return;
-     }
+     if (!finalPharmacyId) { alert("Error: No se ha identificado la farmacia."); return; }
 
      const payload = {
           client_name: formData.clientName, client_phone: formData.clientPhone, tarjeta_trebol: formData.tarjetaTrebol,
-          appointment_time: appointmentTime, 
-          service_id: finalServiceId, 
-          pharmacy_id: finalPharmacyId, // <-- ID validado
+          appointment_time: appointmentTime, service_id: finalServiceId, pharmacy_id: finalPharmacyId,
           reminder_sent: formData.reminderSent, attended: formData.attended, amount: formData.amount,
           status: formData.isReserve ? 'reserva' : 'confirmada', is_new_client: formData.isNewClient,
           observations: formData.observations, created_by_user_id: creatorId
@@ -211,38 +202,26 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
          error = res.error;
      }
      
-     if (error) {
-         console.error("Error guardando cita:", error);
-         alert("Error al guardar: " + error.message);
-     } else {
-         setIsModalOpen(false);
-         loadAgendaForDay(); // Recargar tabla
-     }
+     if (error) alert("Error al guardar: " + error.message);
+     else { setIsModalOpen(false); loadAgendaForDay(); }
   }
   
   const handleDelete = async () => {
       if(!window.confirm("¿Borrar cita?")) return;
       const { error } = await supabase.from('appointments').delete().eq('id', selectedAppointment.id);
       if (error) alert("Error al borrar: " + error.message);
-      else {
-          setIsModalOpen(false);
-          loadAgendaForDay();
-      }
+      else { setIsModalOpen(false); loadAgendaForDay(); }
   }
 
-
   // --- Render ---
-  const visibleServices = services.filter(s => 
-      !filterPharmacyId || s.pharmacy_id.toString() === filterPharmacyId
-  );
+  const visibleServices = services.filter(s => !filterPharmacyId || s.pharmacy_id.toString() === filterPharmacyId);
+  const reservations = dayAppointments.filter(app => app.status === 'reserva');
 
   return (
     <div className="reports-container">
-       <h1>Agenda por Servicio (Vista Tabla)</h1>
+       <h1>Agenda por Servicio</h1>
        
-       {/* BARRA DE FILTROS */}
        <div className="report-controls" style={{backgroundColor: '#e3f2fd', border: '1px solid #90caf9'}}>
-           {/* Farmacia (Admin/Gestor) */}
            {['admin','gestor'].includes(profile.role) && (
                <div className="filter-group">
                    <label>Farmacia</label>
@@ -252,8 +231,6 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
                    </select>
                </div>
            )}
-
-           {/* Servicio */}
            <div className="filter-group">
                <label>Servicio</label>
                <select value={filterServiceId} onChange={e=>setFilterServiceId(e.target.value)} disabled={!filterPharmacyId && ['admin','gestor'].includes(profile.role)}>
@@ -261,8 +238,6 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
                    {visibleServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
                </select>
            </div>
-
-           {/* Mes y Año */}
            <div className="filter-group">
                <label>Mes</label>
                <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}>
@@ -273,23 +248,20 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
                <label>Año</label>
                <input type="number" value={filterYear} onChange={e=>setFilterYear(e.target.value)} style={{width:'80px'}}/>
            </div>
-
-           {/* Selector de DÍA ESPECÍFICO (Calculado) */}
            <div className="filter-group">
                <label>Día (Disponible)</label>
                <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} disabled={!filterServiceId} style={{minWidth:'150px', fontWeight:'bold', color: '#2e7d32'}}>
                    <option value="">-- Elige Día --</option>
                    {getAvailableDates().map(dateStr => (
-                       <option key={dateStr} value={dateStr}>
-                           {new Date(dateStr).toLocaleDateString('es-ES', {weekday: 'short', day: 'numeric', month:'long'})}
-                       </option>
+                       <option key={dateStr} value={dateStr}>{new Date(dateStr).toLocaleDateString('es-ES', {weekday: 'short', day: 'numeric', month:'long'})}</option>
                    ))}
                </select>
            </div>
        </div>
 
-       {/* TABLA DE AGENDA */}
        {filterDate && filterServiceId && (
+           <>
+           {/* TABLA PRINCIPAL */}
            <div className="report-card">
                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #eee', paddingBottom:10, marginBottom:10}}>
                     <h2 style={{margin:0, border:0}}>
@@ -310,43 +282,61 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
                                <th>Cliente</th>
                                <th>Teléfono</th>
                                <th>Tarjeta</th>
-                               <th style={{width:'150px'}}>Acción</th>
+                               <th style={{width: '150px'}}>Observaciones</th>
+                               <th style={{width:'50px', textAlign:'center'}}>Record.</th>
+                               <th style={{width:'50px', textAlign:'center'}}>Asist.</th>
+                               <th style={{width:'90px'}}>Gasto (€)</th>
+                               <th style={{width:'120px'}}>Acción</th>
                            </tr>
                        </thead>
                        <tbody>
                            {daySlots.length === 0 ? (
-                               <tr><td colSpan="6" style={{textAlign:'center', padding:20}}>No hay huecos generados para este día.</td></tr>
+                               <tr><td colSpan="10" style={{textAlign:'center', padding:20}}>No hay huecos generados para este día.</td></tr>
                            ) : (
                                daySlots.map(slot => {
-                                   const app = dayAppointments.find(a => formatTime(new Date(a.appointment_time).toLocaleTimeString('en-GB')) === formatTime(slot.slot_time));
+                                   const app = dayAppointments.find(a => a.status !== 'reserva' && formatTime(new Date(a.appointment_time).toLocaleTimeString('en-GB')) === formatTime(slot.slot_time));
                                    const isOccupied = !!app;
-                                   const isReserva = app?.status === 'reserva';
 
                                    return (
-                                       <tr key={slot.slot_time} style={{backgroundColor: isOccupied ? (isReserva?'#fff3e0':'#e3f2fd') : 'white'}}>
+                                       <tr key={slot.slot_time} style={{backgroundColor: isOccupied ? '#e3f2fd' : 'white'}}>
                                            <td style={{fontWeight:'bold', fontSize:'1.1em'}}>{formatTime(slot.slot_time)}</td>
                                            <td>
-                                               {isOccupied ? (
-                                                   <span style={{
-                                                       padding:'4px 8px', borderRadius:'4px', fontSize:'0.8em', fontWeight:'bold',
-                                                       backgroundColor: isReserva ? '#fd7e14' : '#0d6efd', color:'white'
-                                                   }}>
-                                                       {isReserva ? 'RESERVA' : 'OCUPADO'}
-                                                   </span>
-                                               ) : (
-                                                   <span style={{color:'#2e7d32'}}>Libre</span>
-                                               )}
+                                               {isOccupied ? 
+                                                   <span style={{padding:'4px 8px', borderRadius:'4px', fontSize:'0.8em', fontWeight:'bold', backgroundColor: '#0d6efd', color:'white'}}>OCUPADO</span> 
+                                                   : <span style={{color:'#2e7d32'}}>Libre</span>
+                                               }
                                            </td>
                                            <td>{app?.client_name || '-'}</td>
                                            <td>{app?.client_phone || '-'}</td>
                                            <td>{app?.tarjeta_trebol || '-'}</td>
+                                           <td style={{fontSize:'0.85em', color:'#666', maxWidth:'150px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={app?.observations}>
+                                               {app?.observations || '-'}
+                                           </td>
+                                           
+                                           <td style={{textAlign:'center'}}>
+                                               <input type="checkbox" checked={!!app?.reminder_sent} disabled={!isOccupied} 
+                                                      onChange={e => handleUpdateField(app.id, { reminder_sent: e.target.checked })} />
+                                           </td>
+
+                                           <td style={{textAlign:'center'}}>
+                                               <input type="checkbox" checked={!!app?.attended} disabled={!isOccupied} 
+                                                      onChange={e => handleUpdateField(app.id, { attended: e.target.checked })} />
+                                           </td>
+
+                                           <td>
+                                               <input type="number" step="0.01" className="amount-input" disabled={!isOccupied} 
+                                                      value={app?.amount_display ?? app?.amount ?? ''} 
+                                                      onChange={e => handleAmountInputChange(app.id, e.target.value)} 
+                                                      onBlur={() => handleSaveAmount(app.id)} />
+                                           </td>
+
                                            <td>
                                                <button 
                                                    className={isOccupied ? "button-secondary" : "button"}
                                                    style={!isOccupied ? {padding:'4px 10px', fontSize:'0.85em'} : {}}
                                                    onClick={() => handleSlotClick(slot.slot_time, app)}
                                                >
-                                                   {isOccupied ? 'Editar / Ver' : 'Reservar'}
+                                                   {isOccupied ? 'Editar' : 'Reservar'}
                                                </button>
                                            </td>
                                        </tr>
@@ -357,6 +347,46 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
                    </table>
                </div>
            </div>
+
+           {/* SECCIÓN RESERVAS (LISTA DE ESPERA) */}
+           <div className="report-card" style={{borderLeft: '5px solid #fd7e14'}}>
+               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:15}}>
+                   <h3 style={{color: '#fd7e14', margin:0}}>Lista de Espera / Reservas ({reservations.length})</h3>
+                   {/* ¡BOTÓN NUEVO! */}
+                   <button className="button button-small" style={{backgroundColor:'#fd7e14', borderColor:'#fd7e14'}} onClick={handleAddReservation}>
+                       + Añadir Reserva
+                   </button>
+               </div>
+               
+               {reservations.length > 0 ? (
+                   <div className="table-wrapper">
+                       <table className="service-table">
+                           <thead>
+                               <tr>
+                                   <th>Hora Aprox.</th><th>Cliente</th><th>Teléfono</th><th>Tarjeta</th><th>Observaciones</th><th>Acciones</th>
+                               </tr>
+                           </thead>
+                           <tbody>
+                               {reservations.map(res => (
+                                   <tr key={res.id} style={{backgroundColor: '#fff3e0'}}>
+                                       <td>{new Date(res.appointment_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                       <td>{res.client_name}</td>
+                                       <td>{res.client_phone}</td>
+                                       <td>{res.tarjeta_trebol}</td>
+                                       <td>{res.observations || '-'}</td>
+                                       <td>
+                                           <button className="button-secondary" onClick={() => handleSlotClick(null, res)}>Editar / Asignar</button>
+                                       </td>
+                                   </tr>
+                               ))}
+                           </tbody>
+                       </table>
+                   </div>
+               ) : (
+                   <p style={{color:'#666', fontStyle:'italic'}}>No hay pacientes en lista de espera para este día.</p>
+               )}
+           </div>
+           </>
        )}
        
        {!filterDate && (
@@ -365,7 +395,6 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
            </div>
        )}
 
-       {/* Modal Reutilizado */}
        {isModalOpen && (
         <AppointmentModal
           profile={profile} 
@@ -373,17 +402,14 @@ export default function AgendaTable({ profile, activeEmployeeId }) {
           onClose={handleCloseModal}
           mode={modalMode} 
           date={filterDate} 
-          // CORRECCIÓN CLAVE: Inicializar el objeto 'existingAppointment' con el ID de la farmacia
-          // para que el Modal sepa dónde guardar.
           existingAppointment={selectedAppointment ? selectedAppointment : { 
-              appointment_time: `${filterDate}T${selectedSlotTime}`, 
-              pharmacy_id: parseInt(filterPharmacyId), // <-- ¡AQUÍ ESTÁ LA SOLUCIÓN!
+              appointment_time: `${filterDate}T${selectedSlotTime || '09:00'}`, 
+              pharmacy_id: parseInt(filterPharmacyId), 
               service_id: parseInt(filterServiceId) 
           }}
           onSave={handleSave} 
           onUpdate={handleSave} 
           onDelete={handleDelete}
-          
           selectedPharmacyId={filterPharmacyId}
         />
       )}

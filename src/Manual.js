@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-// Componente de sección colapsable con estilo mejorado
+// Componente de sección colapsable
 function CollapsibleSection({ title, children, defaultOpen = false, roleColor = '#2e7d32' }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
@@ -22,222 +22,278 @@ function CollapsibleSection({ title, children, defaultOpen = false, roleColor = 
   );
 }
 
-// Caja de nota estratégica para Admins
-function StrategyNote({ children }) {
+// Nota Técnica
+function TechnicalNote({ children }) {
     return (
         <div style={{
-            backgroundColor: '#e3f2fd', 
-            borderLeft: '4px solid #1976d2', 
+            backgroundColor: '#f8f9fa', 
+            borderLeft: '4px solid #6c757d', 
             padding: '15px', 
             margin: '15px 0', 
             borderRadius: '4px',
-            fontSize: '0.95rem',
-            color: '#0d47a1',
-            lineHeight: '1.5'
+            fontSize: '0.9rem',
+            color: '#333'
         }}>
-            <strong>🎯 Nota Técnica / Estratégica:</strong><br/> {children}
+            <strong>Nota Técnica:</strong> {children}
         </div>
     )
 }
 
 export default function Manual({ profile }) {
-  const isManager = ['admin', 'gestor', 'gerente'].includes(profile.role);
+  const isEmployee = profile.role === 'empleado';
+  const isGerente = profile.role === 'gerente';
+  const isUpperManagement = ['admin', 'gestor'].includes(profile.role);
+
+  let title = "Manual de Operaciones";
+  if (isUpperManagement) title = "Manual Maestro (Descriptivo)";
+  if (isGerente) title = "Manual de Gestión de Farmacia";
+  if (isEmployee) title = "Guía de Mostrador";
 
   return (
     <div className="reports-container">
-      <h1>Manual Maestro de Operaciones</h1>
+      <h1>{title}</h1>
       <p className="mb-4">
-        Documentación técnica y operativa detallada del sistema <strong>Farmacias Trébol</strong>. 
-        <br/>Perfil activo: <strong style={{textTransform: 'uppercase', color: isManager ? '#d32f2f' : '#2e7d32'}}>{profile.role}</strong>
+        Perfil activo: <strong style={{textTransform: 'uppercase', color: '#2e7d32'}}>{profile.role}</strong>
       </p>
 
       {/* =================================================================================
-          VISTA PARA EMPLEADOS (OPERATIVA DIARIA)
+          1. VISTA PARA EMPLEADOS (OPERATIVA DE MOSTRADOR)
          ================================================================================= */}
-      {!isManager && (
+      {isEmployee && (
         <>
           <div style={{background: '#e8f5e9', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #c8e6c9'}}>
-             <strong>👋 Guía Rápida de Mostrador.</strong> Sigue estos pasos para asegurar que tus ventas y citas se registran correctamente.
+             <strong>👋 Guía Rápida de Mostrador.</strong>
           </div>
-
-          <CollapsibleSection title="1. Protocolo de Inicio de Turno (Modo Quiosco)" defaultOpen={true}>
-            <p>El sistema utiliza un "Login Compartido" para agilizar el trabajo en los ordenadores de mostrador.</p>
+          <CollapsibleSection title="1. Protocolo de Inicio (Fichar)" defaultOpen={true}>
+            <p>El ordenador del mostrador tiene un usuario compartido. Para trabajar:</p>
             <ol>
-                <li><strong>No cierres sesión</strong> al terminar tu turno, salvo que la farmacia vaya a cerrar.</li>
-                <li><strong>Selector de Identidad:</strong> En la barra verde superior, a la derecha, verás un desplegable que dice "Atendiendo:".</li>
-                <li><strong>Tu Responsabilidad:</strong> Antes de crear o editar cualquier cita, asegúrate de que TU NOMBRE está seleccionado en ese desplegable.</li>
-                <li><em>Consecuencia:</em> Si está seleccionado otro compañero, la cita y su posible venta se asignarán a él/ella en los informes de objetivos.</li>
+                <li>Ve a la barra verde superior.</li>
+                <li>Despliega el menú <strong>"Atendiendo:"</strong>.</li>
+                <li>Selecciona <strong>TU NOMBRE</strong>.</li>
+                <li>Todas las citas que crees o modifiques se registrarán bajo tu responsabilidad.</li>
             </ol>
           </CollapsibleSection>
-
-          <CollapsibleSection title="2. Gestión de la Agenda (Calendario)">
-            <ul>
-                <li><strong>Disponibilidad (Fondo):</strong> Los bloques de color con texto (ej. "Nutrición") indican que el servicio está activo y hay un especialista.</li>
-                <li><strong>Citas (Frente):</strong> Las tarjetas blancas sobre el color son citas ya dadas.</li>
-                <li><strong>Estados:</strong>
-                    <ul>
-                        <li><span style={{borderLeft:'4px solid #0d6efd', paddingLeft:'5px'}}><strong>Borde Azul:</strong></span> Cita Confirmada (ocupa hueco).</li>
-                        <li><span style={{borderLeft:'4px solid #fd7e14', paddingLeft:'5px'}}><strong>Borde Naranja:</strong></span> Reserva / Lista de Espera (no tiene hueco asegurado).</li>
-                    </ul>
-                </li>
-                <li><strong>Creación de Cita:</strong>
-                    <ul>
-                        <li>Pulsa en el hueco horario deseado.</li>
-                        <li><strong>Datos Críticos:</strong> El Teléfono y la Tarjeta Trébol son obligatorios para la trazabilidad.</li>
-                        <li><strong>Nuevo Cliente:</strong> Marca esta casilla si el paciente nunca ha utilizado este servicio específico.</li>
-                    </ul>
-                </li>
-            </ul>
-          </CollapsibleSection>
-
-          <CollapsibleSection title="3. Cierre de Cita y Cobro">
-            <p>El ciclo de una cita no termina hasta que se cierra en el sistema:</p>
-            <ol>
-                <li>Cuando el paciente acude, abre su cita en el calendario.</li>
-                <li>Introduce el <strong>Importe Final</strong> que ha pagado.</li>
-                <li>El sistema marcará automáticamente la casilla "Ha Acudido".</li>
-                <li>Si el servicio es gratuito o no genera venta directa, marca manualmente "Ha Acudido" para que cuente en tu estadística de asistencia.</li>
-            </ol>
+          <CollapsibleSection title="2. Agenda y Citas">
+             <ul>
+                 <li><strong>Huecos Libres:</strong> Bloques de color con nombre de servicio. Haz clic para reservar.</li>
+                 <li><strong>Lista de Espera:</strong> Si no hay hueco, guarda como "Reserva" (color naranja).</li>
+                 <li><strong>Cobro:</strong> Al terminar la cita, entra en ella, pon el <strong>Importe</strong> y guarda. Se marcará "Ha Acudido" sola.</li>
+             </ul>
           </CollapsibleSection>
         </>
       )}
 
       {/* =================================================================================
-          VISTA PARA GESTIÓN (DOCUMENTACIÓN TÉCNICA DETALLADA)
+          2. VISTA PARA GERENTES (MANUAL DE GESTIÓN OPERATIVA)
          ================================================================================= */}
-      {isManager && (
+      {isGerente && (
         <>
            <div style={{background: '#fff3e0', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ffe0b2'}}>
-             <strong>🛠️ Documentación Técnica para Gestión.</strong> Este manual detalla la arquitectura de datos, lógica de algoritmos y flujos de trabajo avanzados.
+             <strong>🛠️ Manual de Gestión.</strong> Guía para la configuración de servicios, personal e interpretación de informes de tu farmacia.
           </div>
 
-          {/* --- BLOQUE 1: ARQUITECTURA DE USUARIOS --- */}
-          <CollapsibleSection title="1. Arquitectura de Identidad y Seguridad (Híbrida)" roleColor="#d32f2f" defaultOpen={true}>
-            <h3>El Problema del Entorno de Farmacia</h3>
-            <p>En un entorno de mostrador con alta rotación y ordenadores compartidos, el inicio de sesión tradicional (Email/Contraseña) crea fricción y riesgos de seguridad (contraseñas compartidas, sesiones abiertas por error).</p>
-            
-            <h3>La Solución: Modelo Híbrido</h3>
-            <p>El sistema implementa dos tipos de identidades que conviven en la base de datos:</p>
-            
-            <table className="service-table" style={{marginTop:'10px', marginBottom:'10px'}}>
-                <thead><tr><th>Tipo de Usuario</th><th>Características Técnicas</th><th>Caso de Uso</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Usuario con Credenciales</strong></td>
-                        <td>Existe en <code>auth.users</code> (Supabase Auth). Tiene email, contraseña encriptada y tokens de sesión.</td>
-                        <td><strong>Admin, Gestor, Gerente.</strong> Para acceso remoto, configuración y visualización de datos sensibles desde cualquier dispositivo.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Usuario Local (Ficha)</strong></td>
-                        <td>Solo existe en <code>public.profiles</code>. No tiene credenciales de acceso.</td>
-                        <td><strong>Empleado de Mostrador.</strong> Se "autentica" físicamente al estar presente en el ordenador de la farmacia (logueado con un usuario genérico).</td>
-                    </tr>
-                </tbody>
-            </table>
+          <CollapsibleSection title="1. Gestión de Personal" roleColor="#d32f2f" defaultOpen={true}>
+            <h3>Altas y Accesos</h3>
+            <p>Puedes dar de alta tres tipos de perfiles:</p>
+            <ul>
+                <li><strong>Usuario Genérico de Mostrador (CRÍTICO):</strong> Debes crear al menos uno para activar el Modo Quiosco.
+                    <ul>
+                        <li>Selecciona Rol: <strong>Empleado</strong>.</li>
+                        <li>Marca la casilla: <strong>"Con Login"</strong>.</li>
+                        <li>Asigna un email (ej: <code>mostrador@tu-farmacia.com</code>) y contraseña.</li>
+                        <li><em>Este es el usuario que se quedará logueado en el ordenador de la farmacia.</em></li>
+                    </ul>
+                </li>
+                <li><strong>Empleado (Ficha Local):</strong> Para cada trabajador real.
+                    <ul>
+                        <li>Selecciona Rol: <strong>Empleado</strong>.</li>
+                        <li><strong>NO</strong> marques "Con Login".</li>
+                        <li>Solo pide Nombre. Estos empleados aparecerán en el selector "Atendiendo" cuando se use el Usuario Genérico.</li>
+                    </ul>
+                </li>
+                <li><strong>Gerente Sustituto:</strong> Si necesitas crear otro gerente con acceso remoto.
+                    <ul>
+                        <li>Selecciona Rol: <strong>Gerente</strong>.</li>
+                        <li>Marca "Con Login".</li>
+                    </ul>
+                </li>
+            </ul>
+            <h3>Bajas</h3>
+            <p>Para desactivar a un empleado, usa el botón <strong>"Baja"</strong> en la tabla de empleados. Esto lo oculta del selector diario pero mantiene sus datos históricos en los informes.</p>
+          </CollapsibleSection>
 
-            <h3>Flujo de Trabajo "Modo Quiosco"</h3>
+          <CollapsibleSection title="2. Configuración de Servicios y Objetivos" roleColor="#d32f2f">
+            <h3>Definición</h3>
+            <p>En "Configuración > Servicios", activa los servicios que ofrece tu farmacia y define el tiempo por cita.</p>
+            
+            <h3>Reparto de Objetivos</h3>
+            <p>Para asignar metas justas:</p>
             <ol>
-                <li>Se crea un usuario genérico (ej. <code>mostrador@trebol.com</code>) para la farmacia.</li>
-                <li>Se crea una ficha local para cada empleado (Ana, Juan...).</li>
-                <li>El ordenador inicia sesión una vez al día con el usuario genérico.</li>
-                <li>La aplicación inyecta un <strong>Selector de Contexto</strong> en la barra de navegación.</li>
-                <li>Al crear una cita, el sistema ignora al usuario de la sesión (Mostrador) e inyecta el ID del empleado seleccionado en el campo <code>created_by_user_id</code> de la base de datos.</li>
+                <li>En "Empleados", define las <strong>Horas de mostrador</strong> y <strong>Días trabajados</strong> de cada uno.</li>
+                <li>En "Objetivos", define la meta total de citas para el mes.</li>
+                <li>Usa <strong>"Reparto Automático"</strong>: El sistema distribuirá el objetivo proporcionalmente a las horas trabajadas de cada uno.</li>
+            </ol>
+            <p><em>Nota: Puedes ajustar manualmente los objetivos después del reparto automático si es necesario.</em></p>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="3. Vistas de Agenda" roleColor="#1976d2">
+             <ul>
+                 <li><strong>Calendario:</strong> Vista visual del mes completo. Útil para ver la ocupación global y distribuir citas.</li>
+                 <li><strong>Agenda por Servicio:</strong> Vista de tabla diaria detallada.
+                    <ul>
+                        <li>Permite ver huecos libres de un vistazo rápido.</li>
+                        <li>Permite añadir pacientes a la <strong>Lista de Espera (Reservas)</strong> manualmente cuando el día está lleno, usando el botón naranja.</li>
+                    </ul>
+                 </li>
+             </ul>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="4. Informes y Seguimiento" roleColor="#1976d2">
+            <p>Usa la pestaña de Informes para el control diario:</p>
+            <ul>
+                <li><strong>Informe Actual:</strong> Revisa el "Listado de Citas" filtrando por "Mañana" para hacer las llamadas de recordatorio. Marca la casilla "Record." en la tabla conforme llames.</li>
+                <li><strong>Cumplimiento Individual:</strong> Revisa quién está cumpliendo sus objetivos de captación y ventas.</li>
+            </ul>
+          </CollapsibleSection>
+        </>
+      )}
+
+      {/* =================================================================================
+          3. VISTA PARA ADMIN / GESTOR (DOCUMENTACIÓN PORMENORIZADA POR PESTAÑA)
+         ================================================================================= */}
+      {isUpperManagement && (
+        <>
+           <div style={{background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #90caf9'}}>
+             <strong>🧠 Documentación Detallada.</strong> Descripción exhaustiva de cada módulo de la aplicación.
+          </div>
+
+          {/* --- CAPÍTULO 1: CALENDARIO --- */}
+          <CollapsibleSection title="Pestaña 1: CALENDARIO (Vista Mensual)" roleColor="#1976d2" defaultOpen={true}>
+            <h3>Funcionalidad Principal</h3>
+            <p>Es el cuadro de mando visual para la planificación a medio plazo. Permite detectar días de alta ocupación y huecos de disponibilidad de un vistazo.</p>
+
+            <h3>Elementos de la Interfaz</h3>
+            <ul>
+                <li><strong>Barra de Filtros (Superior):</strong>
+                    <ul>
+                        <li><em>Farmacia (Solo Admin/Gestor):</em> Selecciona qué centro visualizar. Obligatorio para ver datos.</li>
+                        <li><em>Empleado:</em> Filtra las citas creadas por un empleado específico (útil para auditorías).</li>
+                        <li><em>Servicio:</em> Muestra solo las citas y horarios de un tipo (ej. "Nutrición").</li>
+                    </ul>
+                </li>
+                <li><strong>Rejilla Mensual:</strong>
+                    <ul>
+                        <li><strong>Eventos de Fondo (Transparente):</strong> Representan la DISPONIBILIDAD del servicio (Horario teórico). Muestran el nombre del servicio. Al hacer clic en ellos, se abre el formulario de creación pre-seleccionando ese servicio.</li>
+                        <li><strong>Citas (Tarjeta Sólida):</strong> Representan pacientes reales.
+                            <ul>
+                                <li>Borde <span style={{color:'#0d6efd', fontWeight:'bold'}}>AZUL</span>: Cita Confirmada (ocupa hueco).</li>
+                                <li>Borde <span style={{color:'#fd7e14', fontWeight:'bold'}}>NARANJA</span>: Reserva / Lista de Espera (sobre-reserva).</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li><strong>Leyenda (Derecha):</strong> Muestra la codificación de colores asignada a cada servicio activo en la farmacia seleccionada.</li>
+            </ul>
+
+            <TechnicalNote>
+                El calendario cruza dos tablas de datos en tiempo real: <code>service_schedule</code> (para el fondo) y <code>appointments</code> (para las tarjetas).
+            </TechnicalNote>
+          </CollapsibleSection>
+
+          {/* --- CAPÍTULO 2: AGENDA POR SERVICIO --- */}
+          <CollapsibleSection title="Pestaña 2: AGENDA POR SERVICIO (Vista Diaria)" roleColor="#1976d2">
+            <h3>Funcionalidad Principal</h3>
+            <p>Herramienta diseñada para la operativa rápida en recepción/mostrador. Sustituye la visión global por una lista secuencial de huecos (Slots) para un día específico.</p>
+
+            <h3>Flujo de Uso</h3>
+            <ol>
+                <li><strong>Selección de Contexto:</strong> El usuario debe seleccionar Farmacia, Servicio, Mes y Año.</li>
+                <li><strong>Selector de Día Inteligente:</strong> El desplegable "Día" <strong>solo mostrará las fechas</strong> en las que ese servicio tiene horario asignado. Esto evita errores de citación en días sin especialista.</li>
+                <li><strong>Tabla de Huecos:</strong>
+                    <ul>
+                        <li>El sistema divide el horario del especialista en tramos según la duración configurada del servicio.</li>
+                        <li>Muestra el estado de cada tramo: <span style={{color:'green'}}>LIBRE</span> o <span style={{color:'red'}}>OCUPADO</span>.</li>
+                        <li>Permite reservar directamente en el hueco deseado.</li>
+                    </ul>
+                </li>
+                <li><strong>Lista de Espera (Reservas):</strong> Al final de la tabla, aparece un bloque para citas sin hora fija. El botón <strong>"+ Añadir Reserva"</strong> permite registrar pacientes cuando todos los slots están ocupados.</li>
             </ol>
           </CollapsibleSection>
 
-          {/* --- BLOQUE 2: ALGORITMO DE OBJETIVOS --- */}
-          <CollapsibleSection title="2. Algoritmo de Reparto de Objetivos" roleColor="#d32f2f">
-            <p>El sistema abandona la asignación manual arbitraria en favor de un reparto ponderado basado en la capacidad laboral real ("Fuerza de Trabajo").</p>
+          {/* --- CAPÍTULO 3: CONFIGURACIÓN --- */}
+          <CollapsibleSection title="Pestaña 3: CONFIGURACIÓN (Estructural)" roleColor="#d32f2f">
+            <p>Este es el panel de control del sistema. Los cambios aquí afectan a la lógica de negocio.</p>
 
-            <h4>Fórmula del Coeficiente de Fuerza Laboral (W)</h4>
-            <p>Para cada empleado <em>i</em>, se calcula su coeficiente <em>W</em>:</p>
-            <code style={{display:'block', background:'#f4f4f4', padding:'10px', borderRadius:'4px', margin:'10px 0'}}>
-                W(i) = Horas_Mostrador(i) × Días_Trabajados(i)
-            </code>
-            
-            <h4>Fórmula de Asignación de Objetivo (T)</h4>
-            <p>Si el objetivo total de la farmacia para un servicio es <em>Target_Global</em>, el objetivo individual <em>T(i)</em> es:</p>
-            <code style={{display:'block', background:'#f4f4f4', padding:'10px', borderRadius:'4px', margin:'10px 0'}}>
-                T(i) = Target_Global × [ W(i) / Σ(W_todos) ]
-            </code>
-            <p><em>(El sistema aplica un redondeo matemático estándar para evitar decimales en los objetivos de citas).</em></p>
+            <h4>A. Gestión de Farmacias (Solo Admin/Gestor)</h4>
+            <p>Permite dar de alta nuevos centros. Cada farmacia es un ecosistema independiente de datos.</p>
 
-            <StrategyNote>
-                Este algoritmo asegura la equidad. Si un empleado trabaja media jornada (4h) y otro jornada completa (8h), el sistema asignará automáticamente el doble de objetivo al segundo, sin intervención manual del gerente.
-            </StrategyNote>
-            
-            <h4>Objetivo de Nuevos Clientes</h4>
-            <p>Se deriva del objetivo total individual aplicando el porcentaje configurado en el servicio:</p>
-            <code style={{display:'block', background:'#f4f4f4', padding:'10px', borderRadius:'4px', margin:'10px 0'}}>
-                Obj_Nuevos(i) = T(i) × ( %_Objetivo_Nuevos_Servicio / 100 )
-            </code>
-          </CollapsibleSection>
-
-          {/* --- BLOQUE 3: ESTRUCTURA DE SERVICIOS Y HORARIOS --- */}
-          <CollapsibleSection title="3. Configuración de Servicios y Disponibilidad" roleColor="#1976d2">
-            <h3>Entidad: Servicio</h3>
-            <p>Representa una unidad de negocio (ej. Nutrición). Propiedades clave:</p>
+            <h4>B. Gestión de Servicios</h4>
+            <p>Define el catálogo de prestaciones.</p>
             <ul>
-                <li><strong>Tiempo por Cita:</strong> Define la granularidad del calendario. El sistema usa este valor para calcular matemáticamente los slots disponibles en un rango de horas (ej. de 9:00 a 14:00 con citas de 20min = 15 slots).</li>
-                <li><strong>Facturación Estimada:</strong> Dato teórico usado solo para proyectar objetivos económicos, no afecta a la facturación real introducida en las citas.</li>
+                <li><strong>Tiempo por Cita:</strong> CRÍTICO. Define cómo se divide la rejilla del calendario. Si se cambia a posteriori, las citas antiguas podrían quedar desalineadas visualmente, aunque se conservan.</li>
+                <li><strong>% Objetivo Nuevos:</strong> Define la meta de captación que se exigirá al equipo en el reparto de objetivos.</li>
             </ul>
 
-            <h3>Entidad: Horario (Service Schedule)</h3>
-            <p>Define la "capa de fondo" del calendario. El sistema soporta dos tipos de recurrencia:</p>
+            <h4>C. Gestión de Horarios</h4>
+            <p>Define la disponibilidad. Soporta dos modos:</p>
             <ul>
-                <li><strong>Semanal:</strong> El evento se repite indefinidamente todos los días de la semana marcados (ej. "Todos los Lunes").</li>
-                <li><strong>Mensual Específica:</strong> Se utiliza el campo <code>week_number</code>. El calendario calcula dinámicamente las fechas.
-                    <br/><em>Ejemplo:</em> Si marcas "Martes" y "Semana 2", el sistema busca el primer día del mes, calcula cuándo cae el primer martes, y suma 7 días.
-                </li>
+                <li><strong>Recurrente:</strong> Se repite indefinidamente. Puede ser semanal ("Todos los lunes") o mensual ("Semana 2 y 4").</li>
+                <li><strong>Puntual:</strong> Para días específicos (ej. "Campaña del 15 de Mayo"). Tiene prioridad visual.</li>
+            </ul>
+
+            <h4>D. Gestión de Empleados</h4>
+            <p>Administración del personal y sus accesos.</p>
+            <ul>
+                <li><strong>Alta con Login:</strong> (Para Gerentes). Requiere Email. Se envía invitación.</li>
+                <li><strong>Alta Local:</strong> (Para Empleados). Sin Email. Antes crea una ficha con login para que el equipo pueda acceder con el "Modo Quiosco" con el correo del equipo de la farmacia marcando el usuario Empleado y la casilla "con login" .</li>
+                <li><strong>Métricas de Trabajo:</strong> Aquí se definen las <strong>Horas/Día</strong> y <strong>Días/Mes</strong> de cada empleado. Estos datos son la base para el cálculo automático de objetivos.</li>
+                <li><strong>Bajas:</strong> El botón "Baja" oculta al empleado de los selectores operativos pero mantiene sus estadísticas históricas.</li>
+            </ul>
+
+            <h4>E. Gestión de Objetivos</h4>
+            <p>Motor de asignación de metas.</p>
+            <ul>
+                <li>Se establece el <strong>Objetivo Total</strong> de citas para la farmacia y servicio.</li>
+                <li>El botón <strong>Reparto Automático</strong> ejecuta el algoritmo que distribuye esa cifra entre los empleados activos, ponderando por su carga de trabajo (Horas x Días). Puede modificarse directa y manualmente este objetivo para adaptarlo a circunstancias no contempladas .</li>
             </ul>
           </CollapsibleSection>
 
-          {/* --- BLOQUE 4: ANÁLISIS DE DATOS --- */}
-          <CollapsibleSection title="4. Diccionario de Datos e Informes" roleColor="#1976d2">
-            <p>Definición técnica de las métricas calculadas en el "Maestro de Informes".</p>
-            
-            <table className="service-table" style={{fontSize:'0.9rem', marginBottom:'15px'}}>
-                <thead>
-                    <tr>
-                        <th style={{width:'20%'}}>Métrica</th>
-                        <th style={{width:'40%'}}>Fórmula Técnica</th>
-                        <th style={{width:'40%'}}>Interpretación de Negocio</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>% Captación</strong></td>
-                        <td><code>COUNT(Citas) / Objetivo_Citas</code></td>
-                        <td>Eficacia del equipo en llenar la agenda disponible. Un valor >100% indica overbooking o excelente gestión.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>% Asistencia</strong></td>
-                        <td><code>COUNT(Citas WHERE attended=true) / COUNT(Citas)</code></td>
-                        <td>Fiabilidad de la agenda. Una baja asistencia indica fallos en la confirmación o bajo valor percibido por el paciente.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Tasa Conversión</strong></td>
-                        <td><code>COUNT(Citas WHERE amount > 0) / COUNT(Citas WHERE attended=true)</code></td>
-                        <td>Capacidad de venta. De los pacientes que se sentaron, ¿cuántos compraron el producto asociado?</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Nuevos Reales</strong></td>
-                        <td><code>COUNT(Citas WHERE is_new_client=true AND attended=true)</code></td>
-                        <td>Crecimiento neto de la base de datos de pacientes para ese servicio.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>% Cumpl. Facturación</strong></td>
-                        <td><code>SUM(amount) / (Objetivo_Citas * Fact_Estimada)</code></td>
-                        <td>Salud financiera del servicio. Puede ser alto incluso con pocas citas si el ticket medio es superior al estimado.</td>
-                    </tr>
-                </tbody>
-            </table>
+          {/* --- CAPÍTULO 4: INFORMES --- */}
+          <CollapsibleSection title="Pestaña 4: INFORMES (Analítica)" roleColor="#fbc02d">
+            <h3>Lógica de Filtrado Global</h3>
+            <p>La barra superior filtra <strong>todos</strong> los informes simultáneamente. Permite acotar el análisis por rangos de fechas personalizados (no solo meses naturales).</p>
 
-            <StrategyNote>
-                Los informes aplican filtros en cascada. El filtro de <strong>Fecha</strong> y <strong>Farmacia</strong> define el "Universo de Datos". Los filtros de <strong>Servicio</strong> y <strong>Empleado</strong> actúan como "Vistas" sobre ese universo.
-                <br/><br/>
-                <em>Ejemplo:</em> Si filtras por el empleado "Juan", el Resumen General recalculará el % de Cumplimiento Global basándose únicamente en los objetivos y citas de Juan.
-            </StrategyNote>
+            <h4>1. Resumen Mensual</h4>
+            <p>Cuadro de mando de alto nivel. Muestra la salud global de la farmacia en el periodo seleccionado.</p>
+            <ul>
+                <li><strong>% Cumplimiento:</strong> (Citas Realizadas / Objetivo Total).</li>
+                <li><strong>Facturación Real:</strong> Suma de los importes introducidos en las citas cerradas.</li>
+            </ul>
+
+            <h4>2. Detalle por Servicio</h4>
+            <p>Análisis vertical de cada unidad de negocio.</p>
+            <ul>
+                <li><strong>% Captación:</strong> Eficacia llenando la agenda.</li>
+                <li><strong>% Asistencia:</strong> Fiabilidad de los pacientes citados.</li>
+                <li><strong>Tasa Conversión:</strong> Porcentaje de citas asistidas que generaron venta (Importe > 0).</li>
+                <li><strong>% Facturación:</strong> Rendimiento económico real vs. el estimado teórico.</li>
+            </ul>
+
+            <h4>3. Cumplimiento por Empleado</h4>
+            <p>Evaluación del desempeño individual.</p>
+            <ul>
+                <li>Cruza las citas creadas por cada empleado (registradas mediante el selector "Atendiendo") contra el objetivo que se le asignó en Configuración.</li>
+                <li>Muestra tanto el cumplimiento en Citas Totales como en Captación de Nuevos.</li>
+                <li>Permite activar la casilla <strong>"Mostrar Bajas"</strong> para auditar el trabajo de empleados antiguos.</li>
+            </ul>
+
+            <h4>4. Listado de Citas (Operativo)</h4>
+            <p>Herramienta de trabajo diario (no solo análisis).</p>
+            <ul>
+                <li>Permite filtrar por "Estado" (ej. Pendientes de confirmar).</li>
+                <li>Incluye un <strong>Buscador Global</strong> (busca por nombre, teléfono o tarjeta).</li>
+                <li>Permite acciones rápidas (checkboxes) para marcar recordatorios o asistencia sin entrar al detalle de cada cita.</li>
+            </ul>
           </CollapsibleSection>
         </>
       )}
