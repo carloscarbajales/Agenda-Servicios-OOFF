@@ -228,7 +228,7 @@ export default function Manual({ profile }) {
             <p>Permite dar de alta nuevos centros. Cada farmacia es un ecosistema independiente de datos.</p>
 
             <h4>B. Gestión de Servicios</h4>
-            <p>Define el catálogo de prestaciones.</p>
+            <p>Define el catálogo de prestaciones.Puede editarse para añadir nuevas farmacias, en el caso de editar objetivos y tiempos, afectará a la estadística correspondiente a los servicios anteriores</p>
             <ul>
                 <li><strong>Tiempo por Cita:</strong> CRÍTICO. Define cómo se divide la rejilla del calendario. Si se cambia a posteriori, las citas antiguas podrían quedar desalineadas visualmente, aunque se conservan.</li>
                 <li><strong>% Objetivo Nuevos:</strong> Define la meta de captación que se exigirá al equipo en el reparto de objetivos.</li>
